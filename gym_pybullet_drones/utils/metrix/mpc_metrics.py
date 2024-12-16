@@ -71,6 +71,75 @@ def get_collisions(positions, obstacles):
 
     return depth
 
+# Experimental
+def get_collisions_bbox(positions, obstacles, drone_dimensions=[0, 0, 0]):
+    """
+    Check if positions are inside obstacles and calculate depth considering
+    drone dimensions.
+    Function will return the min penetration depth, i.e., the smallest
+    depth value.
+
+    Parameters:
+    - positions: (N, 3) numpy array of positions over time [x, y, z].
+    - obstacles: (O, V, 3) numpy array of obstacles, where O is the number of obstacles,
+                 V is the number of vertices, and each vertex has [x, y, z] coordinates.
+    - drone_dimensions: List of [width, height, depth] of the drone's bounding box.
+
+    Returns:
+    - depth: (N, O) numpy array of depths into the obstacles (0 if outside).
+    """
+    num_positions = positions.shape[0]
+    num_obstacles = obstacles.shape[0]
+
+    # Initialize results
+    depth = np.zeros((num_positions, num_obstacles))
+
+    # Calculate half dimensions of the drone
+    half_width, half_height, half_depth = [dim / 2 for dim in drone_dimensions]
+
+    # Loop through each obstacle
+    for i in range(num_obstacles):
+        vertices = obstacles[i]
+
+        # Create a convex hull for the obstacle
+        hull = ConvexHull(vertices)
+
+        # Loop through each position
+        for j, pos in enumerate(positions):
+            # Create the bounding box for the drone around the center position
+            drone_min_bounds = pos - np.array([half_width, half_height, half_depth])
+            drone_max_bounds = pos + np.array([half_width, half_height, half_depth])
+
+            # Check each corner of the drone's bounding box
+            corners = [
+                drone_min_bounds,
+                drone_max_bounds,
+                [drone_min_bounds[0], drone_min_bounds[1], drone_max_bounds[2]],
+                [drone_min_bounds[0], drone_max_bounds[1], drone_min_bounds[2]],
+                [drone_max_bounds[0], drone_min_bounds[1], drone_min_bounds[2]],
+                [drone_min_bounds[0], drone_max_bounds[1], drone_max_bounds[2]],
+                [drone_max_bounds[0], drone_min_bounds[1], drone_max_bounds[2]],
+                [drone_max_bounds[0], drone_max_bounds[1], drone_min_bounds[2]],
+            ]
+
+            is_inside = any(
+                all(np.dot(eq[:-1], corner) + eq[-1] <= 0 for eq in hull.equations)
+                for corner in corners
+            )
+
+            if is_inside:
+                # Calculate depth (minimum distance to the obstacle's surface)
+                distances = [
+                    min(
+                        abs(np.dot(eq[:-1], corner) + eq[-1]) / np.linalg.norm(eq[:-1])
+                        for corner in corners
+                    )
+                    for eq in hull.equations
+                ]
+                depth[j, i] = min(distances)
+
+    return depth
+
 def get_rmse(ground_truth, values):
     """
     Parameters
@@ -153,7 +222,7 @@ if __name__ == "__main__":
         [0.5, 0.5, 0.5],  # Inside the first obstacle
         [1.5, 1.5, 1.5],  # Outside both obstacles
         [2.5, 2.5, 2.5],  # Inside the second obstacle
-        [3.0, 3.0, 3.0]   # Outside both obstacles
+        [3.1, 3.1, 3.1]   # Outside both obstacles
     ])
 
     # Obstacles: (O, V, 3) numpy array
@@ -170,6 +239,10 @@ if __name__ == "__main__":
     print("Depth:")
     print(depth)
     
+    depth = get_collisions_bbox(positions, obstacles, [0.1,0.1,0.1])
+    print("Depth:")
+    print(depth)
+    
     et = get_time()
     print(rmse)
-    print(time_diff(st, et), " ms")
+    print("Computation time: ", time_diff(st, et), " ms")
