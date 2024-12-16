@@ -25,6 +25,7 @@ from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from gym_pybullet_drones.envs.CtrlAviary import CtrlAviary
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync
+from KeyboardCamera import KeyboardControlledCamera
 
 
 def run_simulation():
@@ -46,11 +47,11 @@ def run_simulation():
         gui=True,
         record=False,
         obstacles=True,  # Enable obstacles
-        user_debug_gui=False,
+        user_debug_gui=True,
     )
 
     # Initialize the logger
-    logger = Logger(logging_freq_hz=48, num_drones=1, output_folder="results")
+    # logger = Logger(logging_freq_hz=48, num_drones=1, output_folder="results")
 
     # Run the simulation loop
     action = np.zeros((1, 4))  # Hover action
@@ -59,17 +60,21 @@ def run_simulation():
 
     env_setup = env_set.Environment(client=env.getPyBulletClient())
     env_setup.add_obstacle("cube")
+    camera = KeyboardControlledCamera(client_id=env.getPyBulletClient())
 
     for step in range(0, int(duration_sec * env.CTRL_FREQ)):
+        camera.update_camera_with_keyboard()
+
         # Step the simulation
         obs, reward, terminated, truncated, info = env.step(action)
 
+
         # Log data
-        control = np.hstack([INIT_XYZS[0], INIT_RPYS[0], np.zeros(6)])  # Shape (12,)
-        logger.log(drone=0, timestamp=step / env.CTRL_FREQ, state=obs[0], control=control)
+        # control = np.hstack([INIT_XYZS[0], INIT_RPYS[0], np.zeros(6)])  # Shape (12,)
+        # logger.log(drone=0, timestamp=step / env.CTRL_FREQ, state=obs[0], control=control)
 
         # Render the simulation
-        env.render()
+        env.render(verbose=False)
 
         # Sync simulation to real-time
         sync(step, start_time, env.CTRL_TIMESTEP)
@@ -78,9 +83,9 @@ def run_simulation():
     # Close the environment
     env.close()
 
-    # Save the results
-    logger.save()  
-    logger.plot()
+    # # Save the results
+    # logger.save()  
+    # logger.plot()
 
 if __name__ == "__main__":
     run_simulation()
