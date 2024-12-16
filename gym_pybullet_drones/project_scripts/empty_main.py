@@ -60,6 +60,7 @@ def run_simulation():
 
     env_setup = env_set.Environment(client=env.getPyBulletClient())
     env_setup.add_obstacle("cube")
+    env_setup.add_obstacle("sphere", [2,2,0], [0,0,0])
     camera = KeyboardControlledCamera(client_id=env.getPyBulletClient())
 
     for step in range(0, int(duration_sec * env.CTRL_FREQ)):
