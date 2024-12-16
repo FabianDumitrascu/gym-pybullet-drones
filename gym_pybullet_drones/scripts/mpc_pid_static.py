@@ -67,7 +67,8 @@ def run(
     H = .1
     H_STEP = .05
     R = .3
-    start_pos = np.array([[0, 0, 0]])  
+    start_pos = np.array([[0, 0, 1]])  
+    target_pos = np.array([[1, 1, 2]]) 
     start_orient = np.array([[0, 0, 0]]) 
 
     #### Create the environment ################################
@@ -99,7 +100,7 @@ def run(
     ctrl = DSLPIDControl(drone_model=drone)
 
     # Initialize do-MPC
-    model = do_mpc.model.Model('discrete')
+    model = do_mpc.model.Model('continuous')
     
     # Define constants
     grav_vector = np.array([0, 0, -9.8]).T
@@ -192,10 +193,12 @@ def run(
     )
     q_dot = 0.5 * M_q @ Omega
 
-    model.set_rhs('q_w', q_dot[0])
-    model.set_rhs('q_x', q_dot[1])
-    model.set_rhs('q_y', q_dot[2])
-    model.set_rhs('q_z', q_dot[3])
+    # Normalize the quaternions for numerical stability
+    q_norm = sqrt(q_w**2 + q_x**2 + q_y**2 + q_z**2)
+    model.set_rhs('q_w', q_dot[0] / q_norm)
+    model.set_rhs('q_x', q_dot[1] / q_norm)
+    model.set_rhs('q_y', q_dot[2] / q_norm)
+    model.set_rhs('q_z', q_dot[3] / q_norm)
 
     #### SYSTEM DYNAMICS HERE (x_k + 1) ####
     xi = vertcat(x, y, z)  # Concatenate state variables
@@ -212,12 +215,12 @@ def run(
     thrust = (1/m) * T * (R @ vertcat(0, 0, 1))  # Thrust in world frame
 
     # Update dynamics
-    xi_dot_new = xi_dot + (thrust + grav_vector) * dt
+    xi_dot_dot = thrust + grav_vector
 
     # Set derivatives in the model
-    model.set_rhs('x_dot', xi_dot_new[0])
-    model.set_rhs('y_dot', xi_dot_new[1])
-    model.set_rhs('z_dot', xi_dot_new[2])
+    model.set_rhs('x_dot', xi_dot_dot[0])
+    model.set_rhs('y_dot', xi_dot_dot[1])
+    model.set_rhs('z_dot', xi_dot_dot[2])
     
     # Complete the model
     model.setup()
@@ -234,13 +237,25 @@ def run(
     mpc.set_param(**setup_mpc) 
 
     # Set cost function
-    model.set_expression(expr_name='cost', expr=cost)
+    Q_cost = diag([10.0, 10.0, 10.0])
+    R_cost = diag([0.1, 0.1, 0.1, 0.1])
+    u_prev = model.set_variable(var_type='_tvp', var_name='u_prev', shape=(4, 1))  # Assuming 4 rotors
+    u_dot = (u - u_prev) / dt  # dt is the control timestep
+
+    cost = (xi - target_pos).T @ Q_cost @ (xi - target_pos) + u_dot.T @ R_cost @ u_dot
+    model.set_objective(expr_name='cost', expr=cost)
 
     # Set contraints
     # lower bounds of the states
-    mpc.bounds['lower','_x','x'] = -max_x
-    # upper bounds of the states
-    mpc.bounds['upper','_x','x'] = max_x
+    mpc.bounds['lower','_x','z'] = 0
+    mpc.bounds['upper','_x','omega_1'] = 21000
+    mpc.bounds['upper','_x','omega_2'] = 21000
+    mpc.bounds['upper','_x','omega_3'] = 21000
+    mpc.bounds['upper','_x','omega_4'] = 21000
+    mpc.bounds['lower','_x','omega_1'] = 0
+    mpc.bounds['lower','_x','omega_2'] = 0
+    mpc.bounds['lower','_x','omega_3'] = 0
+    mpc.bounds['lower','_x','omega_4'] = 0
 
     mpc.setup()
 
@@ -250,8 +265,6 @@ def run(
     mpc.set_initial_guess()
 
     #### Initialize Variables for Straight-Line Path ###########
-    start_pos = start_pos
-    target_pos = np.array([0, 0, 0]) #IMPLEMENT
     total_steps = int(duration_sec * control_freq_hz)
     step_size = (target_pos - start_pos) / total_steps  # Linear interpolation step
 
