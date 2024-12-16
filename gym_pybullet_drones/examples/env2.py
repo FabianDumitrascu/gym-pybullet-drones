@@ -63,15 +63,6 @@ def run_simulation():
         # Step the simulation
         obs, reward, terminated, truncated, info = env.step(action)
 
-        # # Programmatically control the camera
-        # p.resetDebugVisualizerCamera(cameraDistance=2.0, 
-        #                             cameraYaw=step % 360,  # Rotate camera continuously
-        #                             cameraPitch=-20, 
-        #                             cameraTargetPosition=[0, 0, 0])
-        
-        p.configureDebugVisualizer(p.COV_ENABLE_GUI, 1)
-
-
         # Log data
         control = np.hstack([INIT_XYZS[0], INIT_RPYS[0], np.zeros(6)])  # Shape (12,)
         logger.log(drone=0, timestamp=step / env.CTRL_FREQ, state=obs[0], control=control)
@@ -96,37 +87,16 @@ def add_custom_obstacles(client):
     obstacle_ids = [] # List to store obstacle IDs
 
     # Load block 1
-    beam_id = p.loadURDF("../assets/beam.urdf", [.5, 1, 0.75], p.getQuaternionFromEuler([0, 0, 0]), physicsClientId=client)
+    beam_id = p.loadURDF("../assets/beam.urdf", [2.0, 2.5, 0.75], p.getQuaternionFromEuler([0, 0, 0]), physicsClientId=client)
     obstacle_ids.append(beam_id)
 
     # Load block 2
-    beam2_id = p.loadURDF("../assets/beam_horizontal.urdf", [2, 2.5, 0.25], p.getQuaternionFromEuler([0, 0, 0]), physicsClientId=client)
+    beam2_id = p.loadURDF("../assets/beam_horizontal.urdf", [1.5, 0.5, 0.25], p.getQuaternionFromEuler([0, 0, 0]), physicsClientId=client)
     obstacle_ids.append(beam2_id)
 
     # Load block 3
-    cube_id = p.loadURDF("../assets/cube.urdf", [2, 0.5, 0.5], p.getQuaternionFromEuler([0, 0, 0]), physicsClientId=client)
+    cube_id = p.loadURDF("../assets/cube.urdf", [0.0, 2.0, 0.5], p.getQuaternionFromEuler([0, 0, 0]), physicsClientId=client)
     obstacle_ids.append(cube_id)
-
-    # # Load a cylinder
-    # cylinder_id = p.loadURDF("../assets/cylinder.urdf", [0.5, 1, 0.25], p.getQuaternionFromEuler([0, 0, 0]), physicsClientId=client)
-    # obstacle_ids.append(cylinder_id)
-
-    # # Load a sphere
-    # sphere_id = p.loadURDF("../assets/sphere.urdf", [3, 3, 0.3], p.getQuaternionFromEuler([0, 0, 0]), physicsClientId=client)
-    # obstacle_ids.append(sphere_id)
-
-    # Retrieve AABBs and positions
-    obstacle_data = []
-    for obs_id in obstacle_ids:
-        position, orientation = p.getBasePositionAndOrientation(obs_id, physicsClientId=client)
-        aabb_min, aabb_max = p.getAABB(obs_id, physicsClientId=client)
-        obstacle_data.append({
-            "position": position,  # Obstacle's center position
-            "aabb_min": aabb_min,  # Bounding box minimum corner
-            "aabb_max": aabb_max,  # Bounding box maximum corner
-        })
-
-    return obstacle_data
 
 
 if __name__ == "__main__":
