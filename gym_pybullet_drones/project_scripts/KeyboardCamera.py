@@ -12,6 +12,7 @@ class KeyboardControlledCamera:
         self.camera_target = [0, 0, 1]
         self.last_update_time = time.time()
         self.update_interval = update_interval  # Time interval between updates (seconds)
+        p.configureDebugVisualizer(p.COV_ENABLE_KEYBOARD_SHORTCUTS, 0)
 
     def update_camera_with_keyboard(self):
         """
@@ -68,12 +69,14 @@ class KeyboardControlledCamera:
         self.last_update_time = current_time
 
 
-
 def main():
     """Main function to test keyboard-controlled camera."""
     # Connect to PyBullet GUI
     client_id = p.connect(p.GUI)
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
+
+    # Disable built-in PyBullet keyboard shortcuts
+    p.configureDebugVisualizer(p.COV_ENABLE_KEYBOARD_SHORTCUTS, 0)
 
     # Load a plane and an object
     p.loadURDF("plane.urdf", physicsClientId=client_id)
@@ -93,6 +96,7 @@ def main():
         p.stepSimulation()
         camera.update_camera_with_keyboard()  # Update the camera based on keyboard input
         time.sleep(1 / 240)  # Match simulation frequency
+
 
 if __name__ == "__main__":
     main()
