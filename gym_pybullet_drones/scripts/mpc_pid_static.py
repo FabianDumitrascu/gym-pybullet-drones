@@ -43,7 +43,7 @@ DEFAULT_PLOT = True
 DEFAULT_USER_DEBUG_GUI = False
 DEFAULT_OBSTACLES = True
 DEFAULT_SIMULATION_FREQ_HZ = 240
-DEFAULT_CONTROL_FREQ_HZ = 48
+DEFAULT_CONTROL_FREQ_HZ = 12
 DEFAULT_DURATION_SEC = 100
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_COLAB = False
@@ -64,18 +64,17 @@ def run(
         colab=DEFAULT_COLAB
         ):
     #### Initialize the simulation #############################
-    H = .1
-    H_STEP = .05
-    R = .3
-    start_pos = np.array([[0, 0, 1]])  
-    target_pos = np.array([[1, 1, 2]]) 
-    start_orient = np.array([[0, 0, 0]]) 
+    start_pos = np.array([0, 0, 1])
+    end_pos = np.array([1, 0, 1]).T
+    start_orient = np.array([0, 0, 0])
+    INIT_RPYS = np.array([[0,0,0]])
+    INIT_XYZS = np.array([start_pos])
 
     #### Create the environment ################################
     env = CtrlAviary(drone_model=drone,
                         num_drones=num_drones,
-                        initial_xyzs=start_pos,
-                        initial_rpys=start_orient,
+                        initial_xyzs=INIT_XYZS,
+                        initial_rpys=INIT_RPYS,
                         physics=physics,
                         neighbourhood_radius=10,
                         pyb_freq=simulation_freq_hz,
@@ -104,11 +103,15 @@ def run(
     
     # Define constants
     grav_vector = np.array([0, 0, -9.8]).T
-    m = ctrl._getURDFParameter('m')
-    ct = ctrl._getURDFParameter('kf')
-    cq = ctrl._getURDFParameter('kn')
-    l = ctrl._getURDFParameter('arm')
+    m = 0.027 #kg
+    ct = 3.16e-10
+    cq = 7.94e-12
+    l = 0.0397
     dt = 1/control_freq_hz
+    ixx = 1.4e-5
+    iyy = 1.4e-5
+    izz = 2.17e-5
+    I_v = diag(vertcat(ixx, iyy, izz))
 
     # Define states (state vector x)
     x = model.set_variable(var_type='_x', var_name='x')
@@ -125,51 +128,33 @@ def run(
     omega_y = model.set_variable(var_type='_x', var_name='omega_y')
     omega_z = model.set_variable(var_type='_x', var_name='omega_z')
 
+    # Define G matrix
     G = np.array([[1, 1, 1, 1],
                   [l * np.sqrt(2)/2, -l * np.sqrt(2)/2, -l * np.sqrt(2)/2, l * np.sqrt(2)/2],
                   [-l * np.sqrt(2)/2, -l * np.sqrt(2)/2, l * np.sqrt(2)/2, l * np.sqrt(2)/2],
                   [cq/ct, -cq/ct, cq/ct, -cq/ct]])
 
-    T = model.set_variable(var_type='_u', var_name='T')
-
-    # Define rotor speeds (omega_1, omega_2, omega_3, omega_4)
+    # Define rotor speeds (inputs)
     omega_1 = model.set_variable(var_type='_u', var_name='omega_1')
     omega_2 = model.set_variable(var_type='_u', var_name='omega_2')
     omega_3 = model.set_variable(var_type='_u', var_name='omega_3')
     omega_4 = model.set_variable(var_type='_u', var_name='omega_4')
-
-    # Define thrust forces u as a function of rotor speeds
-    u1 = model.set_variable(var_type='_z', var_name='u1')
-    u2 = model.set_variable(var_type='_z', var_name='u2')
-    u3 = model.set_variable(var_type='_z', var_name='u3')
-    u4 = model.set_variable(var_type='_z', var_name='u4')
     
-    model.set_rhs('u1', ct * omega_1**2)
-    model.set_rhs('u2', ct * omega_2**2)
-    model.set_rhs('u3', ct * omega_3**2)
-    model.set_rhs('u4', ct * omega_4**2)
-
-    # Combine the thrust forces into the input vector u
+    # Define thrust variables
     T = model.set_variable(var_type='_z', var_name='T')
-    u = vertcat(u1, u2, u3, u4)
-    
     tau_x = model.set_variable(var_type='_z', var_name='tau_x')
     tau_y = model.set_variable(var_type='_z', var_name='tau_y')
     tau_z = model.set_variable(var_type='_z', var_name='tau_z')
 
     # Compute total thrust and torques
-    T_tau = G @ u
-    model.set_rhs('T', T_tau[0])
-    model.set_rhs('tau_x', T_tau[1])
-    model.set_rhs('tau_y', T_tau[2])
-    model.set_rhs('tau_z', T_tau[3])
+    u_vector = vertcat(omega_1**2, omega_2**2, omega_3**2, omega_4**2)  # 4x1 input vector
+    G_u = G @ (ct * u_vector)  # Result is 4x1
 
-    # Define intertia's
-    ixx = ctrl._getURDFParameter('ixx')
-    iyy = ctrl._getURDFParameter('iyy')
-    izz = ctrl._getURDFParameter('izz')
-
-    I_v = diag(vertcat(ixx, iyy, izz))
+    # Extract the scalar components explicitly
+    model.set_alg('T', G_u[0])
+    model.set_alg('tau_x', G_u[1])
+    model.set_alg('tau_y', G_u[2])
+    model.set_alg('tau_z', G_u[3])
 
     # TO-DO Waar komt het vandaan?
     Omega_cross = vertcat(
@@ -194,33 +179,34 @@ def run(
     q_dot = 0.5 * M_q @ Omega
 
     # Normalize the quaternions for numerical stability
-    q_norm = sqrt(q_w**2 + q_x**2 + q_y**2 + q_z**2)
+    q_norm = sqrt(q_w**2 + q_x**2 + q_y**2 + q_z**2 + 1e-8)
     model.set_rhs('q_w', q_dot[0] / q_norm)
     model.set_rhs('q_x', q_dot[1] / q_norm)
     model.set_rhs('q_y', q_dot[2] / q_norm)
     model.set_rhs('q_z', q_dot[3] / q_norm)
 
-    #### SYSTEM DYNAMICS HERE (x_k + 1) ####
-    xi = vertcat(x, y, z)  # Concatenate state variables
-    xi_dot = vertcat(x_dot, y_dot, z_dot)
-
     # Rotation matrix for quaternions
-    R = vertcat(
+    R_matrix = vertcat(
         horzcat(1 - 2 * (q_y**2 + q_z**2), 2 * (q_x * q_y - q_w * q_z), 2 * (q_x * q_z + q_w * q_y)),
         horzcat(2 * (q_x * q_y + q_w * q_z), 1 - 2 * (q_x**2 + q_z**2), 2 * (q_y * q_z - q_w * q_x)),
         horzcat(2 * (q_x * q_z - q_w * q_y), 2 * (q_y * q_z + q_w * q_x), 1 - 2 * (q_x**2 + q_y**2))
     )
 
     # Gravity and thrust
-    thrust = (1/m) * T * (R @ vertcat(0, 0, 1))  # Thrust in world frame
+    thrust = (1/m) * T * (R_matrix @ vertcat(0, 0, 1))  # Thrust in world frame
 
     # Update dynamics
     xi_dot_dot = thrust + grav_vector
 
     # Set derivatives in the model
+    model.set_rhs('x', x_dot)
+    model.set_rhs('y', y_dot)
+    model.set_rhs('z', z_dot)
     model.set_rhs('x_dot', xi_dot_dot[0])
     model.set_rhs('y_dot', xi_dot_dot[1])
     model.set_rhs('z_dot', xi_dot_dot[2])
+
+    # u_prev = model.set_variable(var_type='_tvp', var_name='u_prev', shape=(4, 1))
     
     # Complete the model
     model.setup()
@@ -230,99 +216,154 @@ def run(
     setup_mpc = {
                 'n_horizon': 10,
                 't_step': 1/env.CTRL_FREQ,  # match with env control timestep
-                'state_discretization': 'discrete',
+                'state_discretization': 'collocation',
                 'store_full_solution': True
                 }
 
     mpc.set_param(**setup_mpc) 
 
+    mpc.set_param(t_step=1/env.CTRL_FREQ)
+
+    # tvp_template = mpc.get_tvp_template()
+
+    # # Time-varying parameter function
+    # def tvp_fun(t_now):
+    #     tvp_template['_tvp', :, 'u_prev'] = np.zeros((4, 1))  # Update with actual previous control input
+    #     return tvp_template
+
+    # mpc.set_tvp_fun(tvp_fun)
+
     # Set cost function
     Q_cost = diag([10.0, 10.0, 10.0])
-    R_cost = diag([0.1, 0.1, 0.1, 0.1])
-    u_prev = model.set_variable(var_type='_tvp', var_name='u_prev', shape=(4, 1))  # Assuming 4 rotors
-    u_dot = (u - u_prev) / dt  # dt is the control timestep
-
-    cost = (xi - target_pos).T @ Q_cost @ (xi - target_pos) + u_dot.T @ R_cost @ u_dot
-    model.set_objective(expr_name='cost', expr=cost)
+    # R_cost = diag([0.1, 0.1, 0.1, 0.1]) 
+    
+    # lterm = (vertcat(x, y, z) - end_pos).T @ Q_cost @ (vertcat(x, y, z) - end_pos) + \
+    #     ((vertcat(omega_1, omega_2, omega_3, omega_4) - u_prev) / dt).T @ R_cost @ ((vertcat(omega_1, omega_2, omega_3, omega_4) - u_prev) / dt)
+    
+    lterm = (vertcat(x, y, z) - end_pos).T @ Q_cost @ (vertcat(x, y, z) - end_pos)
+    mterm = 0 * x 
+    mpc.set_objective(lterm=lterm, mterm=mterm)
 
     # Set contraints
     # lower bounds of the states
     mpc.bounds['lower','_x','z'] = 0
-    mpc.bounds['upper','_x','omega_1'] = 21000
-    mpc.bounds['upper','_x','omega_2'] = 21000
-    mpc.bounds['upper','_x','omega_3'] = 21000
-    mpc.bounds['upper','_x','omega_4'] = 21000
-    mpc.bounds['lower','_x','omega_1'] = 0
-    mpc.bounds['lower','_x','omega_2'] = 0
-    mpc.bounds['lower','_x','omega_3'] = 0
-    mpc.bounds['lower','_x','omega_4'] = 0
+    mpc.bounds['upper','_u','omega_1'] = 21000
+    mpc.bounds['upper','_u','omega_2'] = 21000
+    mpc.bounds['upper','_u','omega_3'] = 21000
+    mpc.bounds['upper','_u','omega_4'] = 21000
+    mpc.bounds['lower','_u','omega_1'] = 0
+    mpc.bounds['lower','_u','omega_2'] = 0
+    mpc.bounds['lower','_u','omega_3'] = 0
+    mpc.bounds['lower','_u','omega_4'] = 0
 
     mpc.setup()
 
     # Set initial conditions
-    mpc.x0 = start_pos[0, :]
-    mpc.u0 = np.zeros(3)
+    x0 = np.array([
+    0, 0, 1,         # Position (x, y, z)
+    0, 0, 0,         # Velocity (x_dot, y_dot, z_dot)
+    1, 0, 0, 0,      # Quaternion (q_w, q_x, q_y, q_z)
+    0, 0, 0          # Angular velocity (omega_x, omega_y, omega_z)
+    ])
+    
+    mpc.x0 = x0
+    mpc.u0 = np.zeros(4)
     mpc.set_initial_guess()
 
     #### Initialize Variables for Straight-Line Path ###########
-    total_steps = int(duration_sec * control_freq_hz)
-    step_size = (target_pos - start_pos) / total_steps  # Linear interpolation step
+   # total_steps = int(duration_sec * control_freq_hz)
 
     #### Run the simulation 
-    action = np.zeros((1, 4))
-    START = time.time()
-    for i in range(0, int(duration_sec * env.CTRL_FREQ)):
+    try:
+        #### Run the simulation 
+        action = np.zeros((1, 4))
+        START = time.time()
 
-        # Step the simulation 
-        obs = env.step(action)
-        action = mpc.make_step(obs)
-        # Compute straight line target
-        target_pos_step = start_pos + step_size * i
+        # Open a file to log predictions
+        prediction_log_file = open("predictions_log.csv", "w")
+        prediction_log_file.write("Time,Predicted_X,Predicted_Y,Predicted_Z\n")  # Header
 
-        target_pos = action[:3]  # Target position (x, y, z)
-        target_vel = action[3:6]  # Target velocity (x_dot, y_dot, z_dot)
+        trajectory_log_file = open("full_trajectory_log.csv", "w")
+        trajectory_log_file.write("Time,Step,X_Pred,Y_Pred,Z_Pred\n")  # Write header
 
-        # Compute Control Input 
-        action, _, _ = ctrl.computeControlFromState(
-            control_timestep=env.CTRL_TIMESTEP,
-            state=obs,           
-            target_pos=target_pos_step,
-            target_rpy=start_orient,  # Fixed orientation for simplicity
-            target_vel=target_vel
-        )
+        for i in range(0, int(duration_sec * env.CTRL_FREQ)):
+            # Step the simulation 
+            obs = env.step(action)[0]
+            state_vector = (obs.flatten())[:13]
+            mpc.make_step(state_vector)
+            
+            # Retrieve predicted states from do-mpc
+            predicted_x = mpc.data.prediction(('_x', 'x'), t_ind=-1)[0, 0]
+            predicted_y = mpc.data.prediction(('_x', 'y'), t_ind=-1)[0, 0]
+            predicted_z = mpc.data.prediction(('_x', 'z'), t_ind=-1)[0, 0]
 
-        # Log the Simulation 
-        logger.log(
-            drone=0,                      # Only one drone
-            timestamp=i / env.CTRL_FREQ,
-            state=obs,                 # Log the single drone state
-            control=action          # Log the computed action
-        )
+            predicted_x_dot = mpc.data.prediction(('_x', 'x_dot'), t_ind=-1)[0, 0]
+            predicted_y_dot = mpc.data.prediction(('_x', 'y_dot'), t_ind=-1)[0, 0]
+            predicted_z_dot = mpc.data.prediction(('_x', 'z_dot'), t_ind=-1)[0, 0]
 
-        # Printout 
-        env.render()
+            predicted_x_traj = mpc.data.prediction(('_x', 'x'))[:, 0]  # All future x predictions
+            predicted_y_traj = mpc.data.prediction(('_x', 'y'))[:, 0]  # All future y predictions
+            predicted_z_traj = mpc.data.prediction(('_x', 'z'))[:, 0]  # All future z predictions
 
-        # Sync the simulation 
-        if gui:
-            sync(i, START, env.CTRL_TIMESTEP)
+            target_pos = np.array([predicted_x, predicted_y, predicted_z]).flatten()
+            target_vel = np.array([predicted_x_dot, predicted_y_dot, predicted_z_dot]).flatten()
 
-    #### Close the environment 
-    env.close()
+            # Write predictions to the file
+            timestamp = i / env.CTRL_FREQ  # Time in seconds
+            prediction_log_file.write(f"{timestamp},{predicted_x},{predicted_y},{predicted_z}\n")
+            for step, (px, py, pz) in enumerate(zip(predicted_x_traj, predicted_y_traj, predicted_z_traj)):
+                trajectory_log_file.write(f"{timestamp},{step},{px},{py},{pz}\n")
 
-    #### Save the simulation results 
-    # Create a 'log' directory if it doesn't exist
-    os.makedirs("log", exist_ok=True)
+            print("Target Position:", target_pos)
+            print("Target Velocity:", target_vel)
 
-    # Generate a timestamped filename
-    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    filename = f"log/mpc_pid_static_{timestamp}.csv"
+            # Compute Control Input 
+            action, _, _ = ctrl.computeControlFromState(
+                control_timestep=env.CTRL_TIMESTEP,
+                state=state_vector,           
+                target_pos=target_pos,
+                target_rpy=start_orient,  # Fixed orientation
+                target_vel=target_vel
+            )
 
-    # Save the CSV file
-    logger.save_as_csv(filename)
+            action = action.reshape(1, 4)
 
-    #### Plot the simulation results 
-    if plot:
-        logger.plot()
+            # Pad control input to size (12,)
+            control_padded = np.zeros(12)  # Create a 12-element array
+            control_padded[:4] = action.flatten()  # Place rotor speeds in the first 4 elements
+
+            # Log the Simulation 
+            logger.log(
+                drone=0,                      # Only one drone
+                timestamp=i / env.CTRL_FREQ,
+                state=obs.flatten(),          # Log the single drone state
+                control=control_padded        # Log the computed action
+            )
+
+            # Render
+            env.render()
+
+            # Sync the simulation 
+            if gui:
+                sync(i, START, env.CTRL_TIMESTEP)
+
+    except KeyboardInterrupt:
+        print("Simulation interrupted. Saving logs...")
+
+    finally:
+        #### Close the environment and save logs
+        env.close()
+
+        os.makedirs("log", exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        filename = f"log/mpc_pid_static_{timestamp}.csv"
+        logger.save_as_csv(filename)
+        print(f"Log saved to {filename}")
+
+        # Close the file
+        prediction_log_file.close()
+        print("Predictions log saved to 'predictions_log.csv'")
+        trajectory_log_file.close()
 
 if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##
