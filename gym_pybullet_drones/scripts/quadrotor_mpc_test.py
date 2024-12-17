@@ -1,6 +1,6 @@
 from acados_template import AcadosOcp, AcadosOcpSolver
 from quadrotor_model import export_quadrotor_model
-from casadi import SX, vertcat, horzcat, np
+from casadi import *
 import numpy as np
 
 # Load the quadrotor model (assuming your model function is in export_quadrotor_model)
@@ -18,16 +18,24 @@ T = 1.0  # Time horizon
 dt = T / N  # Time step
 
 # Set up the cost function (typically for tracking and control effort)
-Q = np.eye(12)  # State cost
+Q = np.eye(13)  # State cost
 R = np.eye(4)   # Control cost
 
-# Set the QP cost for the terminal cost (if needed)
-ocp.cost.W = np.block([[Q, np.zeros((12, 4))], [np.zeros((4, 12)), R]])  # Terminal cost
-ocp.cost.W_e = np.block([[Q, np.zeros((12, 4))], [np.zeros((4, 12)), R]])
+# Set the QP cost for the stage cost (not terminal cost)
+ocp.cost.W = np.block([[Q, np.zeros((13, 4))], [np.zeros((4, 13)), R]])  # Stage cost
+
+# Set initial state cost (penalty for initial state)
+ocp.cost.W_0 = np.eye(13)  # Penalize deviation of initial state
+
+# Gradient of the cost w.r.t. the initial state (usually zero for no initial state penalty)
+ocp.cost.Vx_0 = np.zeros((13, 1))  # Zero if no specific penalty gradient is needed
+
+# Gradient of the cost w.r.t. the initial control input (usually zero for no initial control penalty)
+ocp.cost.Vu_0 = np.zeros((4, 1))  # Zero if no specific penalty gradient is needed
 
 # Set the initial state and final state (setpoints for the problem)
-x0 = np.zeros((12, 1))  # Initial state (set to zero or some specific initial condition)
-xf = np.zeros((12, 1))  # Final state (set as the desired state)
+x0 = np.zeros((13, 1))  # Initial state (set to zero or some specific initial condition)
+xf = np.zeros((13, 1))  # Final state (set as the desired state)
 
 # Set the initial state and final state boundary conditions
 ocp.constraints.lbx = x0  # Set the lower bound for state (initial state)
@@ -45,13 +53,27 @@ ocp.solver_options.N = N
 
 # Initial guess (usually, you can initialize it as a simple guess, such as zero control inputs)
 u0 = np.zeros((4, N))  # Initial control guess (constant zero control for example)
-x0_guess = np.zeros((12, N))  # Initial state guess (constant zero state)
+x0_guess = np.zeros((13, N))  # Initial state guess (constant zero state)
+
+#print(f"State vector dimension: {ocp.nx}")  # State dimension
+#print(f"Control vector dimension: {ocp.nu}")  # Control dimension
+print(f"W_0 shape: {ocp.cost.W_0.shape}")
+print(f"Vx_0 shape: {ocp.cost.Vx_0.shape}")
+print(f"Vu_0 shape: {ocp.cost.Vu_0.shape}")
+
+
+# You can directly set the initial guess when creating the solver:
+solver = AcadosOcpSolver(ocp, 'acados_solver')  # Create solver
+
+print("After solver:")
+print(f"W_0 shape: {ocp.cost.W_0.shape}")
+print(f"Vx_0 shape: {ocp.cost.Vx_0.shape}")
+print(f"Vu_0 shape: {ocp.cost.Vu_0.shape}")
 
 # Set initial guess into the OCP
-ocp.set_initial_guess(x0_guess, u0)
+solver.set_initial_guess(x0_guess, u0)
 
 # Solve the OCP
-solver = AcadosOcpSolver(ocp, 'acados_solver')  # Create solver
 solver.solve()
 
 # Get the solution

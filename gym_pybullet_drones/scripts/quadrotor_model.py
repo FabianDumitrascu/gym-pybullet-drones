@@ -1,5 +1,5 @@
 from acados_template import AcadosModel
-from casadi import SX, vertcat, horzcat, sin, cos
+from casadi import SX, vertcat, horzcat, sin, cos, diag
 import numpy as np
 
 def export_quadrotor_model() -> AcadosModel:
@@ -39,12 +39,17 @@ def export_quadrotor_model() -> AcadosModel:
     
     x = vertcat(x, y, z, x_dot, y_dot, z_dot, qw, qx, qy, qz, omega_x, omega_y, omega_z)
 
+    print(f"State vector (x) dimension: {x.shape}")
+    
+
     rot_s_1 = SX.sym('rot_s_1')
     rot_s_2 = SX.sym('rot_s_2')
     rot_s_3 = SX.sym('rot_s_3')
     rot_s_4 = SX.sym('rot_s_4')
 	
     u = vertcat(rot_s_1, rot_s_2, rot_s_3, rot_s_4)
+
+    print(f"Control vector (u) dimension: {u.shape}")
 	
     # xdot ##################################################################################
     x_dot       = SX.sym('x_dot')
@@ -138,6 +143,9 @@ def export_quadrotor_model() -> AcadosModel:
     
 
     f_impl = xdot - f_expl
+
+    print(f"Explicit dynamics (f_expl) dimension: {f_expl.shape}")
+    print(f"Implicit dynamics (f_impl) dimension: {f_impl.shape}")
 
     model = AcadosModel()
 
