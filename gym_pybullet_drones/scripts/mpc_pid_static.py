@@ -65,7 +65,7 @@ def run(
         ):
     #### Initialize the simulation #############################
     start_pos = np.array([0, 0, 1])
-    end_pos = np.array([1, 0, 1]).T
+    end_pos = np.array([1, 0, 1])
     start_orient = np.array([0, 0, 0])
     INIT_RPYS = np.array([[0,0,0]])
     INIT_XYZS = np.array([start_pos])
@@ -240,7 +240,7 @@ def run(
     # lterm = (vertcat(x, y, z) - end_pos).T @ Q_cost @ (vertcat(x, y, z) - end_pos) + \
     #     ((vertcat(omega_1, omega_2, omega_3, omega_4) - u_prev) / dt).T @ R_cost @ ((vertcat(omega_1, omega_2, omega_3, omega_4) - u_prev) / dt)
     
-    lterm = (vertcat(x, y, z) - end_pos).T @ Q_cost @ (vertcat(x, y, z) - end_pos)
+    lterm = (vertcat(x, y, z) - end_pos.T).T @ Q_cost @ (vertcat(x, y, z) - end_pos.T)
     mterm = 0 * x 
     mpc.set_objective(lterm=lterm, mterm=mterm)
 
@@ -305,8 +305,8 @@ def run(
             predicted_y_traj = mpc.data.prediction(('_x', 'y'))[:, 0]  # All future y predictions
             predicted_z_traj = mpc.data.prediction(('_x', 'z'))[:, 0]  # All future z predictions
 
-            target_pos = np.array([predicted_x, predicted_y, predicted_z]).flatten()
-            target_vel = np.array([predicted_x_dot, predicted_y_dot, predicted_z_dot]).flatten()
+            target_position = np.array([predicted_x, predicted_y, predicted_z]).flatten()
+            target_velocity = np.array([predicted_x_dot, predicted_y_dot, predicted_z_dot]).flatten()
 
             # Write predictions to the file
             timestamp = i / env.CTRL_FREQ  # Time in seconds
@@ -314,16 +314,16 @@ def run(
             for step, (px, py, pz) in enumerate(zip(predicted_x_traj, predicted_y_traj, predicted_z_traj)):
                 trajectory_log_file.write(f"{timestamp},{step},{px},{py},{pz}\n")
 
-            print("Target Position:", target_pos)
-            print("Target Velocity:", target_vel)
+            print("Target Position:", target_position)
+            print("Target Velocity:", target_velocity)
 
             # Compute Control Input 
             action, _, _ = ctrl.computeControlFromState(
                 control_timestep=env.CTRL_TIMESTEP,
                 state=state_vector,           
-                target_pos=target_pos,
+                target_pos=target_position,
                 target_rpy=start_orient,  # Fixed orientation
-                target_vel=target_vel
+                target_vel=target_velocity
             )
 
             action = action.reshape(1, 4)
