@@ -43,7 +43,7 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
 
     nx = model.x.rows()
     nu = model.u.rows()
-    end_state = np.concatenate([end_position, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
+    end_state = np.concatenate([end_position, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
 
     # set dimensions and prediction horizon
     ocp.dims.N = prediction_horizon
@@ -51,7 +51,7 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
     ocp.solver_options.tf = final_time
 
     # cost matrices
-    Q_mat = np.eye(13)
+    Q_mat = 10*np.eye(13)
     R_mat = np.eye(4)
 
     # path cost
@@ -67,8 +67,8 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
     ocp.cost.W_e = Q_mat
 
     # set constraints
-    ocp.constraints.lbu = np.array([-10, -10, -10 , -10])
-    ocp.constraints.ubu = np.array([10, 10, 10, 10])
+    ocp.constraints.lbu = np.array([0, 0, 0, 0])
+    ocp.constraints.ubu = np.array([1000, 1000, 1000, 1000])
     ocp.constraints.idxbu = np.array([0, 1, 2, 3])
     ocp.constraints.x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]) # placeholder x0
 
@@ -84,7 +84,7 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
     # print(f"Final time (tf): {ocp.solver_options.tf}")
     # print(f"Prediction horizon (N): {ocp.solver_options.N_horizon}")
 
-    ocp.solver_options.print_level = 3 # Set higher print level for more diagnostics
+    ocp.solver_options.print_level = 0 # Set higher print level for more diagnostics
 
     solver = AcadosOcpSolver(ocp)
 
@@ -111,7 +111,7 @@ def get_solution(solver, nx, nu, prediction_horizon, final_time):
 
     # Plot results
     time = np.linspace(0, final_time, prediction_horizon+1)
-    plot_results(time, simX, simU)
+    # plot_results(time, simX, simU)
 
     return simX, simU
 

@@ -17,13 +17,13 @@ import os
 import time
 import argparse
 from datetime import datetime
+import time
 import pdb
 import math
 import random
 import numpy as np
 import pybullet as p
 import matplotlib.pyplot as plt
-import do_mpc
 from casadi import *
 from scipy.spatial.transform import Rotation as R
 
@@ -67,7 +67,7 @@ def run(
         ):
     #### Initialize the simulation #############################
     start_pos = np.array([0, 0, 1])
-    end_pos = np.array([1, 0, 1])
+    end_pos = np.array([1, 1, 1])
     start_orient = np.array([0, 0, 0])
     INIT_RPYS = np.array([[0,0,0]])
     INIT_XYZS = np.array([start_pos])
@@ -102,7 +102,7 @@ def run(
     ctrl = DSLPIDControl(drone_model=drone)
 
     prediction_horizon = 20
-    final_time = 10.0
+    final_time = 1
     solver, nx, nu, prediction_horizon, final_time = initialize_solver(prediction_horizon=prediction_horizon, final_time=final_time, end_position = end_pos)
 
     #### Run the simulation 
@@ -118,9 +118,14 @@ def run(
         trajectory_log_file = open("full_trajectory_log.csv", "w")
         trajectory_log_file.write("Time,Step,X_Pred,Y_Pred,Z_Pred\n")  # Write header
 
+        target_position = start_pos
         for i in range(0, int(duration_sec * env.CTRL_FREQ)):
             # Step the simulation 
+            print(i)
+            print(action.shape)
+            print(action)
             obs = env.step(action)[0]
+            
             state_vector = (obs.flatten())[:13]
             set_initial_state(solver, state_vector)
             
@@ -131,29 +136,33 @@ def run(
                 break
 
             simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time)
-
-            predicted_x, predicted_y, predicted_z = simX[1, :3]
-            predicted_x_dot, predicted_y_dot, predicted_z_dot = simX[1, 4:6]
-            target_position = np.array([predicted_x, predicted_y, predicted_z]).flatten()
-            target_velocity = np.array([predicted_x_dot, predicted_y_dot, predicted_z_dot]).flatten()
-
-            # Write predictions to the file
-            timestamp = i / env.CTRL_FREQ  # Time in seconds
             
-            prediction_log_file.write(f"{timestamp},{predicted_x},{predicted_y},{predicted_z}\n")
-            print("Target Position:", target_position)
-            print("Target Velocity:", target_velocity)
 
+            if i == 1:
+                predicted_x, predicted_y, predicted_z = simX[10, :3]
+                predicted_x_dot, predicted_y_dot, predicted_z_dot = simX[1, 4:7]
+                predicted_omega_x, predicted_omega_y, predicted_omega_z = simX[1, 10:14]
+                target_position = np.array([predicted_x, predicted_y, predicted_z]).flatten()
+                # target_velocity = np.array([predicted_x_dot, predicted_y_dot, predicted_z_dot]).flatten()
+                # target_rpy_rates = np.array([predicted_omega_x, predicted_omega_y, predicted_omega_z]).flatten()
+
+                # Write predictions to the file
+                timestamp = i / env.CTRL_FREQ  # Time in seconds
+                
+                prediction_log_file.write(f"{timestamp},{predicted_x},{predicted_y},{predicted_z}\n")
+                
+                # print("Target Velocity:", target_velocity)
+            print("Target Position:", target_position, i)
             # Compute Control Input 
             action, _, _ = ctrl.computeControlFromState(
                 control_timestep=env.CTRL_TIMESTEP,
                 state=state_vector,           
-                target_pos=target_position,
-                target_rpy=start_orient,  # Fixed orientation
-                target_vel=target_velocity
+                target_pos=np.array([2,2,1]).T,
+                # target_rpy=start_orient,  # Fixed orientation
+                # target_vel=target_velocity,
+                # target_rpy_rates = target_rpy_rates,   
             )
-
-            # action = action.reshape(1, 4)
+            action = action.reshape(1, 4)
 
             # Pad control input to size (12,)
             control_padded = np.zeros(12)  # Create a 12-element array

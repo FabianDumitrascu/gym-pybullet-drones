@@ -40,8 +40,8 @@ def exportModel():
 
   km_kf = km / kf
 
-  moment_x = 0.0397 * (-u1 + u2 + u3 - u4)
-  moment_y = 0.0397 * (-u1 + u2 - u3 + u4)
+  moment_x = 0.0397 * (u1 - u2 - u3 + u4)
+  moment_y = 0.0397 * (-u1 - u2 + u3 + u4)
 
   f_expl_rpm = vertcat(x4, x5, x6, \
                        (1/mass)*(u1+u2+u3+u4)*(2*x7*x9 + 2*x8*x10)/(x7**2 + x8**2 + x9**2 + x10**2),
@@ -53,7 +53,7 @@ def exportModel():
                        (x13*x7)/2 + (x12*x8)/2 - (x11*x9)/2,
                        (moment_x + iyy*x12*x13 - izz*x12*x13)/ixx,
                        (moment_y - ixx*x11*x13 + izz*x11*x13)/iyy,
-                       (km_kf*(-u1-u2+u3+u4) + ixx*x11*x12 - iyy*x11*x12)/izz)
+                       (km_kf*(u1-u2+u3-u4) + ixx*x11*x12 - iyy*x11*x12)/izz)
 
   f_expl = f_expl_rpm
 
