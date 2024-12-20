@@ -3,6 +3,10 @@ from quadrotor_dynamic_model_test import exportModel
 import numpy as np
 import casadi as ca
 import matplotlib.pyplot as plt
+import pybullet as p
+import pybullet_data
+import time
+
 
 def plot_results(time, simX, simU):
     """
@@ -115,6 +119,32 @@ def get_solution(solver, nx, nu, prediction_horizon, final_time):
 
     return simX, simU
 
+def add_debug_dot():
+    """
+    Add a dot in the PyBullet simulation to represent the drone's position.
+    """
+    # Initialize PyBullet
+    p.connect(p.GUI)
+    p.setAdditionalSearchPath(pybullet_data.getDataPath())
+    p.loadURDF("plane.urdf")
+    p.setGravity(0, 0, -9.8)
+
+    # Load your drone model
+    drone = p.loadURDF("quadrotor.urdf", [0, 0, 1])
+
+    # Simulate
+    for i in range(1000):
+        # Step simulation
+        p.stepSimulation()
+        time.sleep(1 / 240.0)
+
+        # Get the drone's current position
+        pos, _ = p.getBasePositionAndOrientation(drone)
+
+        # Draw a small point (it will update each frame)
+        p.addUserDebugLine(pos, pos, [1, 0, 0], 5)  # Red dot (size 5)
+
+    p.disconnect()
 
 # if __name__ == '__main__':
 #     main()

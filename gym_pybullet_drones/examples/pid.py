@@ -145,6 +145,7 @@ def run(
                                                                     # target_pos=INIT_XYZS[j, :] + TARGET_POS[wp_counters[j], :],
                                                                     target_rpy=INIT_RPYS[j, :]
                                                                     )
+            print(np.hstack([TARGET_POS[wp_counters[j], 0:2], INIT_XYZS[j, 2]]))
 
         #### Go to the next way point and loop #####################
         for j in range(num_drones):

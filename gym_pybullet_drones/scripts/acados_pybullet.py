@@ -138,6 +138,18 @@ def run(
             simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time)
             
 
+            predicted_x, predicted_y, predicted_z = simX[10, :3]
+            target_position = np.array([predicted_x, predicted_y, predicted_z]).flatten()
+
+            # Add debug dot for predicted position
+            p.addUserDebugLine(
+                lineFromXYZ=target_position,
+                lineToXYZ=target_position + np.array([0, 0, 0.1]),
+                lineColorRGB=[1, 0, 0],  # Red color
+                lineWidth=3,
+                lifeTime=1/env.CTRL_FREQ
+            )
+
             if i == 1:
                 predicted_x, predicted_y, predicted_z = simX[10, :3]
                 predicted_x_dot, predicted_y_dot, predicted_z_dot = simX[1, 4:7]
@@ -161,6 +173,15 @@ def run(
                 # target_rpy=start_orient,  # Fixed orientation
                 # target_vel=target_velocity,
                 # target_rpy_rates = target_rpy_rates,   
+            )
+
+            drone_position = state_vector[:3]
+            p.addUserDebugLine(
+                lineFromXYZ=drone_position,
+                lineToXYZ=drone_position + np.array([0, 0, 0.1]),
+                lineColorRGB=[0, 0, 1],  # Blue color
+                lineWidth=3,
+                lifeTime=1/env.CTRL_FREQ
             )
             action = action.reshape(1, 4)
 
