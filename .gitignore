@@ -1,3 +1,7 @@
+# C build directory
+gym_pybullet_drones/scripts/c_generated_code/
+*.csv
+
 # TODOs 
 TODOs.md
 examples/debug.py

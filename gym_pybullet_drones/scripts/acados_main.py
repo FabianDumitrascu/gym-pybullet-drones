@@ -37,7 +37,7 @@ def plot_results(time, simX, simU):
     plt.title("Control Inputs")
     plt.show()
 
-def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zeros(0)):
+def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zeros(3), x0=np.zeros(13)):
     # create ocp object to formulate the OCP
     ocp = AcadosOcp()
 
@@ -53,10 +53,16 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
     ocp.dims.N = prediction_horizon
     ocp.solver_options.N_horizon = prediction_horizon
     ocp.solver_options.tf = final_time
+    ocp.solver_options.nlp_solver_max_iter = 200  # or 300, etc.
 
     # cost matrices
-    Q_mat = 10*np.eye(13)
-    R_mat = np.eye(4)
+    Q_mat = np.diag([
+                    10, 10, 10,    # x, y, z
+                    1, 1, 1,       # vx, vy, vz
+                    1, 1, 1, 1,  # q0, q1, q2, q3 (orientation)
+                    0.5, 0.5, 0.5  # wx, wy, wz
+    ])
+    R_mat = 1*np.eye(4)
 
     # path cost
     ocp.cost.cost_type = 'NONLINEAR_LS'
@@ -72,9 +78,12 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
 
     # set constraints
     ocp.constraints.lbu = np.array([0, 0, 0, 0])
-    ocp.constraints.ubu = np.array([1000, 1000, 1000, 1000])
+    ocp.constraints.ubu = np.array([20000, 20000, 20000, 20000])
     ocp.constraints.idxbu = np.array([0, 1, 2, 3])
-    ocp.constraints.x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]) # placeholder x0
+
+    ocp.constraints.idxbx_0 = np.arange(nx)    # e.g. fix ALL states at node 0
+    ocp.constraints.lbx_0    = x0             # lower bound at node 0
+    ocp.constraints.ubx_0    = x0  
 
     # set options
     ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM' # FULL_CONDENSING_QPOASES
@@ -88,7 +97,7 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
     # print(f"Final time (tf): {ocp.solver_options.tf}")
     # print(f"Prediction horizon (N): {ocp.solver_options.N_horizon}")
 
-    ocp.solver_options.print_level = 0 # Set higher print level for more diagnostics
+    ocp.solver_options.print_level = 1 # Set higher print level for more diagnostics
 
     solver = AcadosOcpSolver(ocp)
 
@@ -96,7 +105,7 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
 
 def set_initial_state(solver, x0):
     solver.set(0, "x", x0)
-
+    
 def solve_ocp(solver):
     status = solver.solve()
     if status != 0:

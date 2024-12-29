@@ -45,7 +45,7 @@ DEFAULT_PLOT = True
 DEFAULT_USER_DEBUG_GUI = False
 DEFAULT_OBSTACLES = True
 DEFAULT_SIMULATION_FREQ_HZ = 240
-DEFAULT_CONTROL_FREQ_HZ = 12
+DEFAULT_CONTROL_FREQ_HZ = 48
 DEFAULT_DURATION_SEC = 100
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_COLAB = False
@@ -66,12 +66,11 @@ def run(
         colab=DEFAULT_COLAB
         ):
     #### Initialize the simulation #############################
-    start_pos = np.array([0, 0, 1])
-    end_pos = np.array([1, 1, 1])
-    start_orient = np.array([0, 0, 0])
-    INIT_RPYS = np.array([[0,0,0]])
+    start_pos = np.array([0.0, 0.0, 0.5])
+    end_pos = np.array([0.5, 0.5, 1.0])
+    INIT_RPYS = np.array([[0.0, 0.0, 0.0]])
     INIT_XYZS = np.array([start_pos])
-    x0 = np.concatenate([start_pos, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
+    x0 = np.concatenate([start_pos, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
 
     #### Create the environment ################################
     env = CtrlAviary(drone_model=drone,
@@ -102,8 +101,9 @@ def run(
     ctrl = DSLPIDControl(drone_model=drone)
 
     prediction_horizon = 20
-    final_time = 1
-    solver, nx, nu, prediction_horizon, final_time = initialize_solver(prediction_horizon=prediction_horizon, final_time=final_time, end_position = end_pos)
+    final_time = 10
+    solver, nx, nu, prediction_horizon, final_time = initialize_solver(prediction_horizon=prediction_horizon, final_time=final_time, end_position = end_pos, x0=x0)
+    set_initial_state(solver, x0)
 
     #### Run the simulation 
     try:
@@ -121,12 +121,15 @@ def run(
         target_position = start_pos
         for i in range(0, int(duration_sec * env.CTRL_FREQ)):
             # Step the simulation 
-            print(i)
-            print(action.shape)
-            print(action)
+            print('timestep = ', i)
+            print('action = ', action)
+
             obs = env.step(action)[0]
+            print('observation = ', obs)
             
             state_vector = (obs.flatten())[:13]
+            print('state_vector = ', state_vector)
+
             set_initial_state(solver, state_vector)
             
             # Solve the OCP
@@ -136,9 +139,8 @@ def run(
                 break
 
             simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time)
-            
 
-            predicted_x, predicted_y, predicted_z = simX[10, :3]
+            predicted_x, predicted_y, predicted_z = simX[5, :3]
             target_position = np.array([predicted_x, predicted_y, predicted_z]).flatten()
 
             # Add debug dot for predicted position
@@ -146,33 +148,16 @@ def run(
                 lineFromXYZ=target_position,
                 lineToXYZ=target_position + np.array([0, 0, 0.1]),
                 lineColorRGB=[1, 0, 0],  # Red color
-                lineWidth=3,
+                lineWidth=10,
                 lifeTime=1/env.CTRL_FREQ
             )
 
-            if i == 1:
-                predicted_x, predicted_y, predicted_z = simX[10, :3]
-                predicted_x_dot, predicted_y_dot, predicted_z_dot = simX[1, 4:7]
-                predicted_omega_x, predicted_omega_y, predicted_omega_z = simX[1, 10:14]
-                target_position = np.array([predicted_x, predicted_y, predicted_z]).flatten()
-                # target_velocity = np.array([predicted_x_dot, predicted_y_dot, predicted_z_dot]).flatten()
-                # target_rpy_rates = np.array([predicted_omega_x, predicted_omega_y, predicted_omega_z]).flatten()
-
-                # Write predictions to the file
-                timestamp = i / env.CTRL_FREQ  # Time in seconds
-                
-                prediction_log_file.write(f"{timestamp},{predicted_x},{predicted_y},{predicted_z}\n")
-                
-                # print("Target Velocity:", target_velocity)
             print("Target Position:", target_position, i)
             # Compute Control Input 
             action, _, _ = ctrl.computeControlFromState(
                 control_timestep=env.CTRL_TIMESTEP,
                 state=state_vector,           
-                target_pos=np.array([2,2,1]).T,
-                # target_rpy=start_orient,  # Fixed orientation
-                # target_vel=target_velocity,
-                # target_rpy_rates = target_rpy_rates,   
+                target_pos=target_position,
             )
 
             drone_position = state_vector[:3]
@@ -211,16 +196,16 @@ def run(
         #### Close the environment and save logs
         env.close()
 
-        os.makedirs("log", exist_ok=True)
-        timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        filename = f"log/mpc_pid_static_{timestamp}.csv"
-        logger.save_as_csv(filename)
-        print(f"Log saved to {filename}")
+        # os.makedirs("log", exist_ok=True)
+        # timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        # filename = f"log/mpc_pid_static_{timestamp}.csv"
+        # logger.save_as_csv(filename)
+        # print(f"Log saved to {filename}")
 
-        # Close the file
-        prediction_log_file.close()
-        print("Predictions log saved to 'predictions_log.csv'")
-        trajectory_log_file.close()
+        # # Close the file
+        # prediction_log_file.close()
+        # print("Predictions log saved to 'predictions_log.csv'")
+        # trajectory_log_file.close()
 
 if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##
