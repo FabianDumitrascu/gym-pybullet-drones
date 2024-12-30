@@ -50,6 +50,22 @@ DEFAULT_DURATION_SEC = 100
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_COLAB = False
 
+start_pos = np.array([0,0,0.5])
+end_pos = np.array([0.5,0.5,0.5])
+
+def target_trajectory_generator(start_pos, end_pos):
+    distance = np.linalg.norm(start_pos - end_pos)
+    dist_points = 0.5
+    num_points = int(distance / dist_points)
+    waypoints = np.empty((0, 3))
+    for i in range(num_points+1):
+        x = start_pos[0] + (end_pos[0]-start_pos[0]) / num_points * i
+        y = start_pos[1] + (end_pos[1]-start_pos[1]) / num_points * i
+        z = start_pos[2] + (end_pos[2]-start_pos[2]) / num_points * i
+        waypoint = np.array([[x, y, z]])
+        waypoints = np.vstack((waypoints, waypoint))
+    return waypoints
+
 def run(
         drone=DEFAULT_DRONES,
         num_drones=DEFAULT_NUM_DRONES,
@@ -63,11 +79,12 @@ def run(
         control_freq_hz=DEFAULT_CONTROL_FREQ_HZ,
         duration_sec=DEFAULT_DURATION_SEC,
         output_folder=DEFAULT_OUTPUT_FOLDER,
-        colab=DEFAULT_COLAB
+        colab=DEFAULT_COLAB,
+        start_pos=start_pos,
+        end_pos=end_pos
         ):
     #### Initialize the simulation #############################
-    start_pos = np.array([0.0, 0.0, 0.5])
-    end_pos = np.array([0.5, 0.5, 1.0])
+
     INIT_RPYS = np.array([[0.0, 0.0, 0.0]])
     INIT_XYZS = np.array([start_pos])
     x0 = np.concatenate([start_pos, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
@@ -99,9 +116,8 @@ def run(
 
     #### Initialize the controllers ############################
     ctrl = DSLPIDControl(drone_model=drone)
-
     prediction_horizon = 20
-    final_time = 10
+    final_time = 3
     solver, nx, nu, prediction_horizon, final_time = initialize_solver(prediction_horizon=prediction_horizon, final_time=final_time, end_position = end_pos, x0=x0)
     set_initial_state(solver, x0)
 
@@ -119,17 +135,13 @@ def run(
         trajectory_log_file.write("Time,Step,X_Pred,Y_Pred,Z_Pred\n")  # Write header
 
         target_position = start_pos
+        waypoints = target_trajectory_generator(start_pos, end_pos)
+
         for i in range(0, int(duration_sec * env.CTRL_FREQ)):
             # Step the simulation 
-            print('timestep = ', i)
-            print('action = ', action)
-
-            obs = env.step(action)[0]
-            print('observation = ', obs)
-            
+            obs = env.step(action)[0]   
             state_vector = (obs.flatten())[:13]
-            print('state_vector = ', state_vector)
-
+        
             set_initial_state(solver, state_vector)
             
             # Solve the OCP
@@ -139,8 +151,7 @@ def run(
                 break
 
             simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time)
-
-            predicted_x, predicted_y, predicted_z = simX[5, :3]
+            predicted_x, predicted_y, predicted_z = simX[2, :3]
             target_position = np.array([predicted_x, predicted_y, predicted_z]).flatten()
 
             # Add debug dot for predicted position
@@ -152,7 +163,12 @@ def run(
                 lifeTime=1/env.CTRL_FREQ
             )
 
-            print("Target Position:", target_position, i)
+            print('timestep = ', i)
+            # print('action = ', action)
+            # print('observation = ', obs)
+            print('state_vector = ', state_vector[:3])
+            print("Target Position:", target_position)
+
             # Compute Control Input 
             action, _, _ = ctrl.computeControlFromState(
                 control_timestep=env.CTRL_TIMESTEP,
@@ -188,6 +204,12 @@ def run(
             # Sync the simulation 
             if gui:
                 sync(i, START, env.CTRL_TIMESTEP)
+
+            # if np.linalg.norm(state_vector[:3] - waypoint) < 0.2:
+            #     waypoint_index +=
+
+            # # Update the waypoint
+            # solver.set("yref", waypoint)
 
     except KeyboardInterrupt:
         print("Simulation interrupted. Saving logs...")

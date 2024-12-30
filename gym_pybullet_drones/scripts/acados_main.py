@@ -53,7 +53,7 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
     ocp.dims.N = prediction_horizon
     ocp.solver_options.N_horizon = prediction_horizon
     ocp.solver_options.tf = final_time
-    ocp.solver_options.nlp_solver_max_iter = 200  # or 300, etc.
+    ocp.solver_options.nlp_solver_max_iter = 200 
 
     # cost matrices
     Q_mat = np.diag([
@@ -78,12 +78,13 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
 
     # set constraints
     ocp.constraints.lbu = np.array([0, 0, 0, 0])
-    ocp.constraints.ubu = np.array([20000, 20000, 20000, 20000])
+    max_thrust = 0.149
+    ocp.constraints.ubu = np.array([max_thrust, max_thrust, max_thrust, max_thrust])
     ocp.constraints.idxbu = np.array([0, 1, 2, 3])
 
-    ocp.constraints.idxbx_0 = np.arange(nx)    # e.g. fix ALL states at node 0
-    ocp.constraints.lbx_0    = x0             # lower bound at node 0
-    ocp.constraints.ubx_0    = x0  
+    ocp.constraints.idxbx_0 = np.arange(nx)    
+    ocp.constraints.lbx_0    = x0            
+    ocp.constraints.ubx_0    = x0 
 
     # set options
     ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM' # FULL_CONDENSING_QPOASES
@@ -97,14 +98,19 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
     # print(f"Final time (tf): {ocp.solver_options.tf}")
     # print(f"Prediction horizon (N): {ocp.solver_options.N_horizon}")
 
-    ocp.solver_options.print_level = 1 # Set higher print level for more diagnostics
+    ocp.solver_options.print_level = 0 # Set higher print level for more diagnostics
 
     solver = AcadosOcpSolver(ocp)
 
     return solver, nx, nu, prediction_horizon, final_time
 
-def set_initial_state(solver, x0):
-    solver.set(0, "x", x0)
+def set_initial_state(solver, state_vector):
+    solver.set(0, "x", state_vector)
+    solver.set(0, "lbx", state_vector)
+    solver.set(0, "ubx", state_vector)
+    # print('acados state = ', state_vector[:3])
+    retrieved_state = solver.get(0, "x")
+    print(f"acados state = {retrieved_state[0:3]}")
     
 def solve_ocp(solver):
     status = solver.solve()
