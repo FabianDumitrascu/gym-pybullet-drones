@@ -78,7 +78,7 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
 
     # set constraints
     ocp.constraints.lbu = np.array([0, 0, 0, 0])
-    max_thrust = 0.149
+    max_thrust = 0.0008
     ocp.constraints.ubu = np.array([max_thrust, max_thrust, max_thrust, max_thrust])
     ocp.constraints.idxbu = np.array([0, 1, 2, 3])
 
