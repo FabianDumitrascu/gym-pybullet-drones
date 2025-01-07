@@ -51,7 +51,7 @@ DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_COLAB = False
 
 start_pos = np.array([0,0,0.5])
-end_pos = np.array([0.5,0,0.5])
+end_pos = np.array([0,0,0.7])
 
 def target_trajectory_generator(start_pos, end_pos):
     distance = np.linalg.norm(start_pos - end_pos)
@@ -68,22 +68,17 @@ def target_trajectory_generator(start_pos, end_pos):
 
 def thrust_to_rpm(thrusts):
     # Parameters
-    kf = 3.16e-10  # Thrust coefficient from URDF
+    kf = 3.16e-10 # Thrust coefficient from URDF
     PWM2RPM_SCALE = 0.2685
     PWM2RPM_CONST = 4070.3
     MIN_PWM = 20000  # Minimum PWM (µs)
     MAX_PWM = 65535  # Maximum PWM (µs)
 
     # Convert thrust to RPM
-    omega = np.sqrt(thrusts / kf)  # Calculate angular velocity (rad/s)
-    rpm = omega * 60 / (2 * np.pi)  # Convert rad/s to RPM
+    rpm = np.sqrt(thrusts / kf)  # Calculate angular velocity (rad/s)
 
-    # Convert RPM to PWM
-    pwm = (rpm - PWM2RPM_CONST) / PWM2RPM_SCALE
-    pwm = np.clip(pwm, MIN_PWM, MAX_PWM)  # Clip PWM values to valid range
-
-    print(f"Thrusts = {thrusts[2,:]}")
-    print(f"RPMs = {rpm[2,:]}")
+    print(f"Thrusts = {thrusts[0,:]}")
+    print(f"RPMs = {rpm[0,:]}")
 
     return rpm
 
@@ -139,31 +134,33 @@ def run(
     ctrl = DSLPIDControl(drone_model=drone)
     prediction_horizon = 20
     final_time = 3
+
     solver, nx, nu, prediction_horizon, final_time = initialize_solver(prediction_horizon=prediction_horizon, final_time=final_time, end_position = end_pos, x0=x0)
-    set_initial_state(solver, x0)
+    
+    hover_rpm = 14468.43
+    hover_u = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
+    
+    set_initial_state(solver, x0, hover_u, prediction_horizon)
 
     #### Run the simulation 
-    try:
-        #### Run the simulation 
-        action = np.zeros((1, 4))
+    try: 
+        # Start at hover speed
+        action = hover_u.reshape(1, 4)
+        
+        #### Run the simulation
         START = time.time()
 
         # Open a file to log predictions
-        prediction_log_file = open("predictions_log.csv", "w")
-        prediction_log_file.write("Time,Predicted_X,Predicted_Y,Predicted_Z\n")  # Header
-
-        trajectory_log_file = open("full_trajectory_log.csv", "w")
-        trajectory_log_file.write("Time,Step,X_Pred,Y_Pred,Z_Pred\n")  # Write header
-
         target_position = start_pos
         waypoints = target_trajectory_generator(start_pos, end_pos)
 
         for i in range(0, int(duration_sec * env.CTRL_FREQ)):
             # Step the simulation 
             obs = env.step(action)[0]   
+            print(f"Current rpms for : {env.current_rpms[0]}")
             state_vector = (obs.flatten())[:13]
         
-            set_initial_state(solver, state_vector)
+            set_initial_state(solver, state_vector, hover_u, prediction_horizon)
             
             # Solve the OCP
             status = solve_ocp(solver)
@@ -172,7 +169,8 @@ def run(
                 break
 
             simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time)
-            predicted_x, predicted_y, predicted_z = simX[2, :3]
+            print('simU[0] = ', simU[0,:])
+            predicted_x, predicted_y, predicted_z = simX[1, :3]
             target_position = np.array([predicted_x, predicted_y, predicted_z]).flatten()
 
             # Add debug dot for predicted position
@@ -190,7 +188,12 @@ def run(
             print("Target Position:", target_position)
 
             # Compute Control Input 
-            action = thrust_to_rpm(simU)[2,:]
+            action = thrust_to_rpm(simU)[0,:]
+
+            # hover_thrust = 0.00073
+            # hover_rpm = thrust_to_rpm(hover_thrust)
+            # hover_rpm = 14468.43
+            # action = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
             # print('action = ', action)
 
             drone_position = state_vector[:3]
@@ -235,17 +238,6 @@ def run(
         #### Close the environment and save logs
         env.close()
 
-        # os.makedirs("log", exist_ok=True)
-        # timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        # filename = f"log/mpc_pid_static_{timestamp}.csv"
-        # logger.save_as_csv(filename)
-        # print(f"Log saved to {filename}")
-
-        # # Close the file
-        # prediction_log_file.close()
-        # print("Predictions log saved to 'predictions_log.csv'")
-        # trajectory_log_file.close()
-
 if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Helix flight script using CtrlAviary and DSLPIDControl')
@@ -265,3 +257,5 @@ if __name__ == "__main__":
     ARGS = parser.parse_args()
 
     run(**vars(ARGS))
+
+
