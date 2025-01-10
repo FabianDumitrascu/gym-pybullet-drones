@@ -66,6 +66,20 @@ def target_trajectory_generator(start_pos, end_pos):
         waypoints = np.vstack((waypoints, waypoint))
     return waypoints
 
+def rpm_to_thrust(rpm):
+    # Parameters
+    kf = 3.16e-10  # Thrust coefficient from URDF
+
+    # Convert RPM to angular velocity (rad/s)
+    omega = rpm * (2 * np.pi / 60)  # Convert RPM to rad/s
+
+    # Convert angular velocity to thrust
+    thrusts = kf * omega**2  # Calculate thrust from angular velocity
+
+    print(f"Thrusts = {thrusts}")
+
+    return thrusts
+
 def run(
         drone=DEFAULT_DRONES,
         num_drones=DEFAULT_NUM_DRONES,
@@ -118,8 +132,12 @@ def run(
     ctrl = DSLPIDControl(drone_model=drone)
     prediction_horizon = 20
     final_time = 3
+
+    hover_rpm = 14468.43
+    hover_u = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
+
     solver, nx, nu, prediction_horizon, final_time = initialize_solver(prediction_horizon=prediction_horizon, final_time=final_time, end_position = end_pos, x0=x0)
-    set_initial_state(solver, x0)
+    set_initial_state(solver, x0, hover_u,  prediction_horizon)
 
     #### Run the simulation 
     try:
@@ -142,7 +160,7 @@ def run(
             obs = env.step(action)[0]   
             state_vector = (obs.flatten())[:13]
         
-            set_initial_state(solver, state_vector)
+            set_initial_state(solver, state_vector, hover_u, prediction_horizon)
             
             # Solve the OCP
             status = solve_ocp(solver)
@@ -175,6 +193,8 @@ def run(
                 state=state_vector,           
                 target_pos=target_position,
             )
+
+            rpm_to_thrust(action)
 
             drone_position = state_vector[:3]
             p.addUserDebugLine(

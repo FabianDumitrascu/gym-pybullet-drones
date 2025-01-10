@@ -45,7 +45,7 @@ def main():
     Tf = 1
     nx = model.x.rows()
     nu = model.u.rows()
-    N = 20
+    N = 20 # predection horizon
 
     # set number of shooting intervals
     ocp.dims.N = N
@@ -64,7 +64,6 @@ def main():
     
     goal_position = np.array([1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])  # Adjust according to the model dimensions
     ocp.cost.yref = np.concatenate([goal_position, np.zeros(nu)])  # Concatenate goal position with zero controls (if needed)
-
     
     ocp.cost.W = ca.diagcat(Q_mat, R_mat).full()
 
@@ -83,7 +82,6 @@ def main():
 
     ocp.constraints.x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
-
     # set options
     ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM' # FULL_CONDENSING_QPOASES
     # PARTIAL_CONDENSING_HPIPM, FULL_CONDENSING_QPOASES, FULL_CONDENSING_HPIPM,
@@ -98,7 +96,6 @@ def main():
     print(f"Prediction horizon (N): {ocp.solver_options.N_horizon}")
 
     ocp.solver_options.print_level = 3  # Set higher print level for more diagnostics
-
 
     ocp_solver = AcadosOcpSolver(ocp)
 

@@ -51,7 +51,7 @@ DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_COLAB = False
 
 start_pos = np.array([0,0,0.5])
-end_pos = np.array([0,0,0.7])
+end_pos = np.array([0.5,0,0.5])
 
 def target_trajectory_generator(start_pos, end_pos):
     distance = np.linalg.norm(start_pos - end_pos)
@@ -139,6 +139,8 @@ def run(
     
     hover_rpm = 14468.43
     hover_u = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
+    simX_prev = np.tile(x0, (prediction_horizon + 1, 1))
+    simU_prev = np.tile(hover_u, (prediction_horizon, 1))
     
     set_initial_state(solver, x0, hover_u, prediction_horizon)
 
@@ -162,14 +164,21 @@ def run(
         
             set_initial_state(solver, state_vector, hover_u, prediction_horizon)
             
+            print("simX_prev before solve:", simX_prev[0,:])
+            print("simU_prev before solve:", simU_prev[0,:])
             # Solve the OCP
-            status = solve_ocp(solver)
+            status = solve_ocp(solver, simX_prev, simU_prev, prediction_horizon)
+
             if status != 0:
                 print(f"Acados solver failed at timestep {i}. State: {state_vector}")
                 break
 
             simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time)
+            # Update the warm-start guesses for the next iteration
+            simX_prev = simX
+            simU_prev = simU
             print('simU[0] = ', simU[0,:])
+
             predicted_x, predicted_y, predicted_z = simX[1, :3]
             target_position = np.array([predicted_x, predicted_y, predicted_z]).flatten()
 
