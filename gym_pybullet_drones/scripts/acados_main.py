@@ -45,25 +45,55 @@ def plot_results_2d_3d(time, simX, simU, sphere_radius, sphere_center):
     nx = simX.shape[1]
     nu = simU.shape[1]
 
-    # 3) Additional: top-down x-y plot (assuming simX[:,0:3] has x,y,z in columns 0,1,2)
-    #    We'll draw the obstacle region as a circle in x,y for demonstration.
-    #    The obstacle center from your code: center=(0.5,0.5), radius=0.5
+    # Top down XY plot
     fig, ax = plt.subplots(figsize=(6,6))
     ax.plot(simX[:, 0], simX[:, 1], 'b.-', label="(x,y) path")
     ax.set_xlabel("x (m)")
     ax.set_ylabel("y (m)")
-    ax.set_title("XY Top-down Path plus obstacle region")
+    ax.set_title("XY Top view Path plus obstacle region")
     ax.grid(True)
     ax.axis('equal')
 
     # Draw the obstacle region (circle).
-    # center = (0.5, 0.5), radius = 0.5
     from matplotlib.patches import Circle
     obstacle_circle = Circle((sphere_center[0], sphere_center[1]), sphere_radius, color="red", alpha=0.3, label="Obstacle Projection")
     ax.add_patch(obstacle_circle)
     ax.legend()
     plt.show()
 
+    # Side view XZ
+    fig, ax = plt.subplots(figsize=(6,6))
+    ax.plot(simX[:, 0], simX[:, 2], 'b.-', label="(x,z) path")
+    ax.set_xlabel("x (m)")
+    ax.set_ylabel("z (m)")
+    ax.set_title("XZ Side view Path plus obstacle region")
+    ax.grid(True)
+    ax.axis('equal')
+
+    # Draw the obstacle region (circle).
+    from matplotlib.patches import Circle
+    obstacle_circle = Circle((sphere_center[1], sphere_center[2]), sphere_radius, color="red", alpha=0.3, label="Obstacle Projection")
+    ax.add_patch(obstacle_circle)
+    ax.legend()
+    plt.show()
+
+    # Side view YZ
+    fig, ax = plt.subplots(figsize=(6,6))
+    ax.plot(simX[:, 0], simX[:, 2], 'b.-', label="(y,z) path")
+    ax.set_xlabel("y (m)")
+    ax.set_ylabel("z (m)")
+    ax.set_title("YZ Side view Path plus obstacle region")
+    ax.grid(True)
+    ax.axis('equal')
+
+    # Draw the obstacle region (circle).
+    from matplotlib.patches import Circle
+    obstacle_circle = Circle((sphere_center[0], sphere_center[1]), sphere_radius, color="red", alpha=0.3, label="Obstacle Projection")
+    ax.add_patch(obstacle_circle)
+    ax.legend()
+    plt.show()
+
+    # 3D plot
     fig = plt.figure(figsize=(8, 8))
     ax = fig.add_subplot(111, projection='3d')
     ax.plot(simX[:, 0], simX[:, 1], simX[:, 2], 'b.-', label="Drone Path")

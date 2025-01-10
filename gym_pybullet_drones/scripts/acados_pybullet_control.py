@@ -104,7 +104,7 @@ def run(
 
     # Define spherical obstacle
     sphere_radius = 0.25
-    sphere_center = np.array([0.5, 0.5, 0.8])
+    sphere_center = np.array([0.5, 0.5, 0.9])
 
     INIT_RPYS = np.array([[0.0, 0.0, 0.0]])
     INIT_XYZS = np.array([start_pos])
