@@ -37,7 +37,7 @@ def plot_results(time, simX, simU):
     plt.title("Control Inputs")
     plt.show()
 
-def plot_results_2d_3d(time, simX, simU, sphere_radius, sphere_center):
+def plot_results_2d_3d(time, simX, simU, sphere_radius, sphere_center, start_pos, end_pos):
     """
     Plot all state and control trajectories in separate combined plots,
     then do an additional x-y top-down plot with the obstacle region.
@@ -48,6 +48,13 @@ def plot_results_2d_3d(time, simX, simU, sphere_radius, sphere_center):
     # Top down XY plot
     fig, ax = plt.subplots(figsize=(6,6))
     ax.plot(simX[:, 0], simX[:, 1], 'b.-', label="(x,y) path")
+    # Plot straight-line trajectory
+    ax.plot(
+        [start_pos[0], end_pos[0]],
+        [start_pos[1], end_pos[1]],
+        'g--',
+        label="Straight Trajectory"
+    )
     ax.set_xlabel("x (m)")
     ax.set_ylabel("y (m)")
     ax.set_title("XY Top view Path plus obstacle region")
@@ -64,6 +71,13 @@ def plot_results_2d_3d(time, simX, simU, sphere_radius, sphere_center):
     # Side view XZ
     fig, ax = plt.subplots(figsize=(6,6))
     ax.plot(simX[:, 0], simX[:, 2], 'b.-', label="(x,z) path")
+    # Plot straight-line trajectory
+    ax.plot(
+        [start_pos[0], end_pos[0]],
+        [start_pos[2], end_pos[2]],
+        'g--',
+        label="Straight Trajectory"
+    )
     ax.set_xlabel("x (m)")
     ax.set_ylabel("z (m)")
     ax.set_title("XZ Side view Path plus obstacle region")
@@ -80,6 +94,15 @@ def plot_results_2d_3d(time, simX, simU, sphere_radius, sphere_center):
     # Side view YZ
     fig, ax = plt.subplots(figsize=(6,6))
     ax.plot(simX[:, 0], simX[:, 2], 'b.-', label="(y,z) path")
+
+    # Plot straight-line trajectory
+    ax.plot(
+        [start_pos[1], end_pos[1]],
+        [start_pos[2], end_pos[2]],
+        'g--',
+        label="Straight Trajectory"
+    )
+
     ax.set_xlabel("y (m)")
     ax.set_ylabel("z (m)")
     ax.set_title("YZ Side view Path plus obstacle region")
@@ -242,7 +265,7 @@ def solve_ocp(solver, simX_prev=None, simU_prev=None, prediction_horizon=None):
 
     return status
 
-def get_solution(solver, nx, nu, prediction_horizon, final_time, sphere_radius, sphere_center):
+def get_solution(solver, nx, nu, prediction_horizon, final_time, sphere_radius, sphere_center, start_pos, end_pos):
     simX = np.zeros((prediction_horizon + 1, nx))
     simU = np.zeros((prediction_horizon, nu))
 
@@ -255,7 +278,7 @@ def get_solution(solver, nx, nu, prediction_horizon, final_time, sphere_radius, 
     # Plot results
     time = np.linspace(0, final_time, prediction_horizon+1)
     # plot_results(time, simX[:,0:3], simU)
-    plot_results_2d_3d(time, simX[:,0:3], simU, sphere_radius, sphere_center)
+    plot_results_2d_3d(time, simX[:,0:3], simU, sphere_radius, sphere_center, start_pos, end_pos)
 
     return simX, simU
 
