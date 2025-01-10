@@ -50,8 +50,9 @@ DEFAULT_DURATION_SEC = 100
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_COLAB = False
 
+# Define start and end postion
 start_pos = np.array([0,0,0.5])
-end_pos = np.array([0.5,0,0.5])
+end_pos = np.array([1,1,1.5])
 
 def target_trajectory_generator(start_pos, end_pos):
     distance = np.linalg.norm(start_pos - end_pos)
@@ -101,6 +102,10 @@ def run(
         ):
     #### Initialize the simulation #############################
 
+    # Define spherical obstacle
+    sphere_radius = 0.25
+    sphere_center = np.array([0.5, 0.5, 0.8])
+
     INIT_RPYS = np.array([[0.0, 0.0, 0.0]])
     INIT_XYZS = np.array([start_pos])
     x0 = np.concatenate([start_pos, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
@@ -133,9 +138,9 @@ def run(
     #### Initialize the controllers ############################
     ctrl = DSLPIDControl(drone_model=drone)
     prediction_horizon = 20
-    final_time = 3
+    final_time = 6
 
-    solver, nx, nu, prediction_horizon, final_time = initialize_solver(prediction_horizon=prediction_horizon, final_time=final_time, end_position = end_pos, x0=x0)
+    solver, nx, nu, prediction_horizon, final_time = initialize_solver(prediction_horizon=prediction_horizon, final_time=final_time, end_position = end_pos, x0=x0, sphere_radius=sphere_radius, sphere_center=sphere_center)
     
     hover_rpm = 14468.43
     hover_u = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
@@ -169,11 +174,12 @@ def run(
             # Solve the OCP
             status = solve_ocp(solver, simX_prev, simU_prev, prediction_horizon)
 
-            if status != 0:
-                print(f"Acados solver failed at timestep {i}. State: {state_vector}")
+            if status not in [0, 2]:   # 0 = success, 2 = max iters but let's accept
+                print(f"ACADOS gave an unexpected status: {status}, stopping.")
                 break
 
-            simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time)
+
+            simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time, sphere_radius, sphere_center)
             # Update the warm-start guesses for the next iteration
             simX_prev = simX
             simU_prev = simU

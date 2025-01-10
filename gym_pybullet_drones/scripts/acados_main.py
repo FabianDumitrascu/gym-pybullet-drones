@@ -37,7 +37,54 @@ def plot_results(time, simX, simU):
     plt.title("Control Inputs")
     plt.show()
 
-def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zeros(3), x0=np.zeros(13)):
+def plot_results_2d_3d(time, simX, simU, sphere_radius, sphere_center):
+    """
+    Plot all state and control trajectories in separate combined plots,
+    then do an additional x-y top-down plot with the obstacle region.
+    """
+    nx = simX.shape[1]
+    nu = simU.shape[1]
+
+    # 3) Additional: top-down x-y plot (assuming simX[:,0:3] has x,y,z in columns 0,1,2)
+    #    We'll draw the obstacle region as a circle in x,y for demonstration.
+    #    The obstacle center from your code: center=(0.5,0.5), radius=0.5
+    fig, ax = plt.subplots(figsize=(6,6))
+    ax.plot(simX[:, 0], simX[:, 1], 'b.-', label="(x,y) path")
+    ax.set_xlabel("x (m)")
+    ax.set_ylabel("y (m)")
+    ax.set_title("XY Top-down Path plus obstacle region")
+    ax.grid(True)
+    ax.axis('equal')
+
+    # Draw the obstacle region (circle).
+    # center = (0.5, 0.5), radius = 0.5
+    from matplotlib.patches import Circle
+    obstacle_circle = Circle((sphere_center[0], sphere_center[1]), sphere_radius, color="red", alpha=0.3, label="Obstacle Projection")
+    ax.add_patch(obstacle_circle)
+    ax.legend()
+    plt.show()
+
+    fig = plt.figure(figsize=(8, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot(simX[:, 0], simX[:, 1], simX[:, 2], 'b.-', label="Drone Path")
+    ax.set_xlabel("x (m)")
+    ax.set_ylabel("y (m)")
+    ax.set_zlabel("z (m)")
+    ax.set_title("3D Path with Obstacle Sphere")
+    ax.grid(True)
+
+    # Draw the sphere in 3D
+    u = np.linspace(0, 2 * np.pi, 100)
+    v = np.linspace(0, np.pi, 100)
+    x = sphere_radius * np.outer(np.cos(u), np.sin(v)) + sphere_center[0]
+    y = sphere_radius * np.outer(np.sin(u), np.sin(v)) + sphere_center[1]
+    z = sphere_radius * np.outer(np.ones(np.size(u)), np.cos(v)) + sphere_center[2]
+    ax.plot_surface(x, y, z, color='red', alpha=0.3, label="Obstacle Sphere")
+
+    ax.legend()
+    plt.show()
+
+def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zeros(3), x0=np.zeros(13), sphere_radius=0.1, sphere_center= np.array([0,0,1])):
     # create ocp object to formulate the OCP
     ocp = AcadosOcp()
 
@@ -53,21 +100,21 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
     ocp.dims.N = prediction_horizon
     ocp.solver_options.N_horizon = prediction_horizon
     ocp.solver_options.tf = final_time
-    ocp.solver_options.nlp_solver_max_iter = 200 
+    ocp.solver_options.nlp_solver_max_iter = 600 
 
-    ocp.solver_options.nlp_solver_tol_stat = 1e-6
-    ocp.solver_options.nlp_solver_tol_eq = 1e-6
-    ocp.solver_options.nlp_solver_tol_ineq = 1e-6
-    ocp.solver_options.nlp_solver_tol_comp = 1e-6
+    ocp.solver_options.nlp_solver_tol_stat = 1e-3
+    ocp.solver_options.nlp_solver_tol_eq = 1e-3
+    ocp.solver_options.nlp_solver_tol_ineq = 1e-3
+    ocp.solver_options.nlp_solver_tol_comp = 1e-3
 
     # cost matrices
     Q_mat = np.diag([
-                    5, 5, 5,    # x, y, z
-                    1, 1, 10,       # vx, vy, vz
-                    0.1, 0.1, 0.1, 0.1,  # q0, q1, q2, q3 (orientation)
+                    5, 5, 10,    # x, y, z
+                    1, 1, 5,       # vx, vy, vz
+                    1, 1, 1, 1,  # q0, q1, q2, q3 (orientation)
                     1, 1, 1  # wx, wy, wz
     ])
-    R_mat = 10*np.eye(4)
+    R_mat = 30*np.eye(4)
 
     hover_thrust = 0.06615
     end_u = np.array([hover_thrust, hover_thrust, hover_thrust, hover_thrust])
@@ -78,15 +125,38 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
     ocp.cost.W = ca.diagcat(Q_mat, R_mat).full()
 
     # terminal cost
+    Q_mat_e = np.diag([
+                    2, 2, 2,    # x, y, z
+                    1, 1, 10,       # vx, vy, vz
+                    0, 0, 0, 0,  # q0, q1, q2, q3 (orientation)
+                    1, 1, 1  # wx, wy, wz
+    ])
+
     ocp.cost.cost_type_e = 'NONLINEAR_LS'
     ocp.cost.yref_e = end_state[:nx]
     ocp.model.cost_y_expr_e = model.x
-    ocp.cost.W_e = Q_mat
+    ocp.cost.W_e = Q_mat_e
     
-    ocp.constraints.idxbx_e = np.arange(nx)  # Constrain all states at terminal time
-    end_tolerance = 0.05  # Define tolerance for terminal constraints
-    ocp.constraints.lbx_e = end_state - end_tolerance  # Lower bounds
-    ocp.constraints.ubx_e = end_state + end_tolerance  # Upper bounds
+    # Add obstacles
+    idxbx_e = np.array([0, 1, 2, 3, 4, 5])  # x, y, z, vx, vy, vz
+    ocp.constraints.idxbx_e = idxbx_e
+
+    end_tolerance = 0.05
+    lbx_e = end_state[idxbx_e] - end_tolerance
+    ubx_e = end_state[idxbx_e] + end_tolerance
+    ocp.constraints.lbx_e = lbx_e
+    ocp.constraints.ubx_e = ubx_e
+
+    # Create symbolic expressions for multiple constraints
+    x = ocp.model.x[0]  # x position
+    y = ocp.model.x[1]  # y position
+    z = ocp.model.x[2]  # z position
+
+    dist_expr = ca.sqrt((x - sphere_center[0])**2 + (y -sphere_center[1])**2 + (z - sphere_center[2])**2)
+    ocp.model.con_h_expr = sphere_radius - dist_expr  # <= 0
+    ocp.dims.nh = 1
+    ocp.constraints.lh = np.array([-1e6])
+    ocp.constraints.uh = np.array([0.0])
 
     # set constraints
     ocp.constraints.lbu = np.array([0, 0, 0, 0])
@@ -107,7 +177,7 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
     ocp.solver_options.nlp_solver_type = 'SQP' # SQP_RTI, SQP
     ocp.solver_options.globalization = 'MERIT_BACKTRACKING' # turns on globalization
 
-    ocp.solver_options.print_level = 0 # Set higher print level for more diagnostics
+    ocp.solver_options.print_level = 1 # Set higher print level for more diagnostics
 
     solver = AcadosOcpSolver(ocp)
 
@@ -137,11 +207,12 @@ def solve_ocp(solver, simX_prev=None, simU_prev=None, prediction_horizon=None):
 
     # Solve the optimization problem
     status = solver.solve()
-    if status != 0:
-        print(f"Solver failed with status: {status}")
+    if status not in [0, 2]:   # 0 = success, 2 = max iters but let's accept
+        print(f"ACADOS gave an unexpected status: {status}, stopping.")
+
     return status
 
-def get_solution(solver, nx, nu, prediction_horizon, final_time):
+def get_solution(solver, nx, nu, prediction_horizon, final_time, sphere_radius, sphere_center):
     simX = np.zeros((prediction_horizon + 1, nx))
     simU = np.zeros((prediction_horizon, nu))
 
@@ -153,7 +224,8 @@ def get_solution(solver, nx, nu, prediction_horizon, final_time):
 
     # Plot results
     time = np.linspace(0, final_time, prediction_horizon+1)
-    plot_results(time, simX[:,0:3], simU)
+    # plot_results(time, simX[:,0:3], simU)
+    plot_results_2d_3d(time, simX[:,0:3], simU, sphere_radius, sphere_center)
 
     return simX, simU
 
