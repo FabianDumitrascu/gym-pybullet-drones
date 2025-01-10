@@ -278,7 +278,7 @@ def get_solution(solver, nx, nu, prediction_horizon, final_time, sphere_radius, 
     # Plot results
     time = np.linspace(0, final_time, prediction_horizon+1)
     # plot_results(time, simX[:,0:3], simU)
-    plot_results_2d_3d(time, simX[:,0:3], simU, sphere_radius, sphere_center, start_pos, end_pos)
+    # plot_results_2d_3d(time, simX[:,0:3], simU, sphere_radius, sphere_center, start_pos, end_pos)
 
     return simX, simU
 
