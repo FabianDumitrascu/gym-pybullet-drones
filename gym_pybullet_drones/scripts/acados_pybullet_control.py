@@ -1,31 +1,22 @@
 """Script demonstrating the joint use of simulation and acados mpc solver.
 
 The simulation is run by a `CtrlAviary` environment.
-The control is given by the PID implementation in `DSLPIDControl`.
+The control is given by acados.
 
 Example
 -------
 In a terminal, run as:
 
-    $ python3 acados_pybullet.py
-
-Notes
------
+    $ python3 acados_pybullet_control.py
 
 """
-import os
 import time
 import argparse
-from datetime import datetime
 import time
-import pdb
-import math
-import random
 import numpy as np
 import pybullet as p
 import matplotlib.pyplot as plt
 from casadi import *
-from scipy.spatial.transform import Rotation as R
 
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from gym_pybullet_drones.envs.CtrlAviary import CtrlAviary
@@ -33,7 +24,6 @@ from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
 
-from quadrotor_dynamic_model_test import exportModel
 from acados_main import initialize_solver, set_initial_state, solve_ocp, get_solution
 
 DEFAULT_DRONES = DroneModel("cf2x")
@@ -52,7 +42,7 @@ DEFAULT_COLAB = False
 
 # Define start and end postion
 start_pos = np.array([0,0,0.5])
-end_pos = np.array([1,1,1.5])
+end_pos = np.array([0,0,1])
 
 def target_trajectory_generator(start_pos, end_pos):
     distance = np.linalg.norm(start_pos - end_pos)
@@ -136,7 +126,6 @@ def run(
                     )
 
     #### Initialize the controllers ############################
-    ctrl = DSLPIDControl(drone_model=drone)
     prediction_horizon = 20
     final_time = 6
 
@@ -150,108 +139,94 @@ def run(
     set_initial_state(solver, x0, hover_u, prediction_horizon)
 
     #### Run the simulation 
-    try: 
-        # Start at hover speed
-        action = hover_u.reshape(1, 4)
+    # Start at hover speed
+    action = hover_u.reshape(1, 4)
+    
+    #### Run the simulation
+    START = time.time()
+
+    # Open a file to log predictions
+    target_position = start_pos
+    waypoints = target_trajectory_generator(start_pos, end_pos)
+
+    for i in range(0, int(duration_sec * env.CTRL_FREQ)):
+        # Step the simulation 
+        obs = env.step(action)[0]   
+        print(f"Current rpms for : {env.current_rpms[0]}")
+        state_vector = (obs.flatten())[:13]
+    
+        set_initial_state(solver, state_vector, hover_u, prediction_horizon)
         
-        #### Run the simulation
-        START = time.time()
+        print("simX_prev before solve:", simX_prev[0,:])
+        print("simU_prev before solve:", simU_prev[0,:])
+        # Solve the OCP
+        status = solve_ocp(solver, simX_prev, simU_prev, prediction_horizon)
 
-        # Open a file to log predictions
-        target_position = start_pos
-        waypoints = target_trajectory_generator(start_pos, end_pos)
-
-        for i in range(0, int(duration_sec * env.CTRL_FREQ)):
-            # Step the simulation 
-            obs = env.step(action)[0]   
-            print(f"Current rpms for : {env.current_rpms[0]}")
-            state_vector = (obs.flatten())[:13]
-        
-            set_initial_state(solver, state_vector, hover_u, prediction_horizon)
-            
-            print("simX_prev before solve:", simX_prev[0,:])
-            print("simU_prev before solve:", simU_prev[0,:])
-            # Solve the OCP
-            status = solve_ocp(solver, simX_prev, simU_prev, prediction_horizon)
-
-            if status not in [0, 2]:   # 0 = success, 2 = max iters but let's accept
-                print(f"ACADOS gave an unexpected status: {status}, stopping.")
-                break
+        if status not in [0, 2]:   # 0 = success, 2 = max iters but let's accept
+            print(f"ACADOS gave an unexpected status: {status}, stopping.")
+            break
 
 
-            simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time, sphere_radius, sphere_center)
-            # Update the warm-start guesses for the next iteration
-            simX_prev = simX
-            simU_prev = simU
-            print('simU[0] = ', simU[0,:])
+        simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time, sphere_radius, sphere_center, start_pos, end_pos)
+        # Update the warm-start guesses for the next iteration
+        simX_prev = simX
+        simU_prev = simU
+        print('simU[0] = ', simU[0,:])
 
-            predicted_x, predicted_y, predicted_z = simX[1, :3]
-            target_position = np.array([predicted_x, predicted_y, predicted_z]).flatten()
+        predicted_x, predicted_y, predicted_z = simX[1, :3]
+        target_position = np.array([predicted_x, predicted_y, predicted_z]).flatten()
 
-            # Add debug dot for predicted position
-            p.addUserDebugLine(
-                lineFromXYZ=target_position,
-                lineToXYZ=target_position + np.array([0, 0, 0.1]),
-                lineColorRGB=[1, 0, 0],  # Red color
-                lineWidth=10,
-                lifeTime=1/env.CTRL_FREQ
-            )
+        # Add debug dot for predicted position
+        p.addUserDebugLine(
+            lineFromXYZ=target_position,
+            lineToXYZ=target_position + np.array([0, 0, 0.1]),
+            lineColorRGB=[1, 0, 0],  # Red color
+            lineWidth=10,
+            lifeTime=1/env.CTRL_FREQ
+        )
 
-            print('timestep = ', i)
-            # print('observation = ', obs)
-            print('state_vector = ', state_vector[:3])
-            print("Target Position:", target_position)
+        print('timestep = ', i)
+        print('state_vector = ', state_vector[:3])
+        print("Target Position:", target_position)
 
-            # Compute Control Input 
-            action = thrust_to_rpm(simU)[0,:]
+        # Compute Control Input 
+        action = thrust_to_rpm(simU)[0,:]
 
-            # hover_thrust = 0.00073
-            # hover_rpm = thrust_to_rpm(hover_thrust)
-            # hover_rpm = 14468.43
-            # action = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
-            # print('action = ', action)
+        drone_position = state_vector[:3]
+        p.addUserDebugLine(
+            lineFromXYZ=drone_position,
+            lineToXYZ=drone_position + np.array([0, 0, 0.1]),
+            lineColorRGB=[0, 0, 1],  # Blue color
+            lineWidth=3,
+            lifeTime=1/env.CTRL_FREQ
+        )
+        action = action.reshape(1, 4)
 
-            drone_position = state_vector[:3]
-            p.addUserDebugLine(
-                lineFromXYZ=drone_position,
-                lineToXYZ=drone_position + np.array([0, 0, 0.1]),
-                lineColorRGB=[0, 0, 1],  # Blue color
-                lineWidth=3,
-                lifeTime=1/env.CTRL_FREQ
-            )
-            action = action.reshape(1, 4)
+        # Pad control input to size (12,)
+        control_padded = np.zeros(12)  # Create a 12-element array
+        control_padded[:4] = action.flatten()  # Place rotor speeds in the first 4 elements
 
-            # Pad control input to size (12,)
-            control_padded = np.zeros(12)  # Create a 12-element array
-            control_padded[:4] = action.flatten()  # Place rotor speeds in the first 4 elements
+        # Log the Simulation 
+        logger.log(
+            drone=0,                      # Only one drone
+            timestamp=i / env.CTRL_FREQ,
+            state=obs.flatten(),          # Log the single drone state
+            control=control_padded        # Log the computed action
+        )
 
-            # Log the Simulation 
-            logger.log(
-                drone=0,                      # Only one drone
-                timestamp=i / env.CTRL_FREQ,
-                state=obs.flatten(),          # Log the single drone state
-                control=control_padded        # Log the computed action
-            )
+        # Render
+        env.render()
 
-            # Render
-            env.render()
+        # Sync the simulation 
+        if gui:
+            sync(i, START, env.CTRL_TIMESTEP)
 
-            # Sync the simulation 
-            if gui:
-                sync(i, START, env.CTRL_TIMESTEP)
+        # if np.linalg.norm(state_vector[:3] - waypoint) < 0.2:
+        #     waypoint_index +=
 
-            # if np.linalg.norm(state_vector[:3] - waypoint) < 0.2:
-            #     waypoint_index +=
-
-            # # Update the waypoint
-            # solver.set("yref", waypoint)
-
-    except KeyboardInterrupt:
-        print("Simulation interrupted. Saving logs...")
-
-    finally:
-        #### Close the environment and save logs
-        env.close()
+        # # Update the waypoint
+        # solver.set("yref", waypoint)
+    env.close()
 
 if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##
@@ -272,5 +247,3 @@ if __name__ == "__main__":
     ARGS = parser.parse_args()
 
     run(**vars(ARGS))
-
-

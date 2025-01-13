@@ -7,25 +7,16 @@ Example
 -------
 In a terminal, run as:
 
-    $ python3 acados_pybullet.py
-
-Notes
------
+    $ python3 acados_pybullet_pid.py
 
 """
-import os
 import time
 import argparse
-from datetime import datetime
 import time
-import pdb
-import math
-import random
 import numpy as np
 import pybullet as p
 import matplotlib.pyplot as plt
 from casadi import *
-from scipy.spatial.transform import Rotation as R
 
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from gym_pybullet_drones.envs.CtrlAviary import CtrlAviary
@@ -33,7 +24,7 @@ from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
 
-from quadrotor_dynamic_model_test import exportModel
+# Import acados mpc functions
 from acados_main import initialize_solver, set_initial_state, solve_ocp, get_solution
 
 DEFAULT_DRONES = DroneModel("cf2x")
@@ -55,6 +46,8 @@ start_pos = np.array([0,0,0.5])
 end_pos = np.array([0.5,0.5,1])
 
 def target_trajectory_generator(start_pos, end_pos):
+    '''Use to create multiple waypoints from a linear straight line path'''
+
     distance = np.linalg.norm(start_pos - end_pos)
     dist_points = 0.5
     num_points = int(distance / dist_points)
@@ -68,6 +61,8 @@ def target_trajectory_generator(start_pos, end_pos):
     return waypoints
 
 def thrust_to_rpm(thrusts):
+    '''Converts rotor thrusts to rpms'''
+    
     # Parameters
     kf = 3.16e-10 # Thrust coefficient from URDF
     PWM2RPM_SCALE = 0.2685
@@ -82,57 +77,6 @@ def thrust_to_rpm(thrusts):
     print(f"RPMs = {rpm[0,:]}")
 
     return rpm
-
-def plot_multi_time(data_matrix, sim_time, labels=None, plot_title=None, second_data_matrix=None, primary_label="Primary", secondary_label="Secondary"):
-    """
-    Parameters:
-    - data_matrix: np.ndarray
-        A 2D numpy array where each row represents a time step, and each column represents a different value.
-    - sim_time: float
-        Total simulation duration in seconds.
-    - labels: list of str (optional)
-        Labels corresponding to each value being plotted. Must match the number of columns in the data_matrix.
-    - plot_title: str (optional)
-        Title for the plot.
-    - second_data_matrix: np.ndarray (optional)
-        A second 2D numpy array for comparison, with the same shape as data_matrix.
-    - primary_label: str
-        Label for the primary data.
-    - secondary_label: str
-        Label for the secondary data.
-    """
-    # Time array
-    num_points = data_matrix.shape[0]
-    time = np.linspace(0, sim_time, num_points)
-
-    num_values = data_matrix.shape[1]
-
-    fig, axes = plt.subplots(num_values, 1, figsize=(10, 5 * num_values), sharex=True)
-    if num_values == 1:
-        axes = [axes]
-
-    for i in range(num_values):
-        values = data_matrix[:, i]
-        axes[i].plot(time, values, label=primary_label, color="blue")
-        if second_data_matrix:
-            second_values = second_data_matrix[:, i]
-            axes[i].plot(time, second_values, label=secondary_label, color="orange", linestyle="--")
-
-        # Label axes
-        label = labels[i] if labels and i < len(labels) else f"Val {i + 1}"
-        axes[i].set_ylabel(label)
-        axes[i].grid(True)
-        if second_data_matrix:
-            axes[i].legend()
-
-    axes[-1].set_xlabel("Time (s)")
-
-    if plot_title:
-        fig.suptitle(plot_title, fontsize=16)
-
-    # Adjust layout
-    plt.tight_layout(rect=[0, 0.03, 1, 0.96])
-    plt.show()
 
 def add_custom_obstacles(client):
     '''Add custom obstacles and retrieve their boundary data.'''
@@ -156,7 +100,7 @@ def run(
         start_pos=start_pos,
         end_pos=end_pos
         ):
-    #### Initialize the simulation #############################
+    # Initialize the simulation
 
     # Define spherical obstacle
     sphere_radius = 0.15
@@ -166,7 +110,7 @@ def run(
     INIT_XYZS = np.array([start_pos])
     x0 = np.concatenate([start_pos, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
 
-    #### Create the environment ################################
+    # Create the environment 
     env = CtrlAviary(drone_model=drone,
                         num_drones=num_drones,
                         initial_xyzs=INIT_XYZS,
@@ -181,21 +125,23 @@ def run(
                         user_debug_gui=user_debug_gui
                         )
 
-    #### Obtain the PyBullet Client ID from the environment ####
+    # Obtain the PyBullet Client ID from the environment ####
     PYB_CLIENT = env.getPyBulletClient()
     
     # Add custom obstacles
     add_custom_obstacles(env.getPyBulletClient())
 
-    #### Initialize the logger #################################
+    # Initialize the logger 
     logger = Logger(logging_freq_hz=control_freq_hz,
                     num_drones=num_drones,
                     output_folder=output_folder,
                     colab=colab
                     )
 
-    #### Initialize the controllers ############################
+    # Initialize the pid controller 
     ctrl = DSLPIDControl(drone_model=drone)
+    
+    # Set parameters for the MPC
     prediction_horizon = 20
     final_time = 6
 
@@ -206,104 +152,74 @@ def run(
     simX_prev = np.tile(x0, (prediction_horizon + 1, 1))
     simU_prev = np.tile(hover_u, (prediction_horizon, 1))
     
-    set_initial_state(solver, x0, hover_u, prediction_horizon)
+    # Start at hover speed
+    action = hover_u.reshape(1, 4)
+    START = time.time()
+    target_position = start_pos
+    waypoint_index = 1
 
-    #### Run the simulation 
-    try: 
-        # Start at hover speed
-        action = hover_u.reshape(1, 4)
+    # Run the simulation 
+    for i in range(0, int(duration_sec * env.CTRL_FREQ)):
         
-        #### Run the simulation
-        START = time.time()
+        # Step the simulation 
+        obs = env.step(action)[0]   
+        state_vector = (obs.flatten())[:13]
 
-        target_position = start_pos
-        waypoint_index = 1
+        if i == 0 :
+            # Initialize the MPC
+            set_initial_state(solver, state_vector, hover_u, prediction_horizon)
+            
+            # Solve the OCP
+            status = solve_ocp(solver, simX_prev, simU_prev, prediction_horizon)
+            if status not in [0, 2]:   # 0 = success, 2 = max iters but let's accept
+                print(f"ACADOS gave an unexpected status: {status}, stopping.")
+                break
 
-        for i in range(0, int(duration_sec * env.CTRL_FREQ)):
-            # Step the simulation 
-            obs = env.step(action)[0]   
-            print(f"Current rpms for : {env.current_rpms[0]}")
-            state_vector = (obs.flatten())[:13]
+            # Retrieve predicted x and u
+            simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time, sphere_radius, sphere_center, start_pos, end_pos)
+            print('simU[0] = ', simU[0,:])
+
+        predicted_x, predicted_y, predicted_z = simX[waypoint_index, :3]
+        target_position = np.array([predicted_x, predicted_y, predicted_z]).flatten()
         
-            # set_initial_state(solver, state_vector, hover_u, prediction_horizon)
+        print('Timestep = ', i)
+        print(f"Current rpms : {env.current_rpms[0]}")
+        print('State Vector = ', state_vector[:3])
+        print("Target Position:", target_position)
 
-            if i == 0 :
-                set_initial_state(solver, state_vector, hover_u, prediction_horizon)
+        # Compute Control Input 
+        action, _, _ = ctrl.computeControlFromState(
+            control_timestep=env.CTRL_TIMESTEP,
+            state=state_vector,           
+            target_pos=target_position,
+        )
 
-                
-                # Solve the OCP
-                status = solve_ocp(solver, simX_prev, simU_prev, prediction_horizon)
-                if status not in [0, 2]:   # 0 = success, 2 = max iters but let's accept
-                    print(f"ACADOS gave an unexpected status: {status}, stopping.")
-                    break
-                simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time, sphere_radius, sphere_center, start_pos, end_pos)
-                print('simU[0] = ', simU[0,:])
+        action = action.reshape(1, 4)
 
-            predicted_x, predicted_y, predicted_z = simX[waypoint_index, :3]
-            target_position = np.array([predicted_x, predicted_y, predicted_z]).flatten()
+        # Pad control input to size (12,)
+        control_padded = np.zeros(12)  # Create a 12-element array
+        control_padded[:4] = action.flatten()  # Place rotor speeds in the first 4 elements
 
-            # plot_multi_time(simX[:,:5], 1)
+        # Log the Simulation 
+        logger.log(
+            drone=0,                      # Only one drone
+            timestamp=i / env.CTRL_FREQ,
+            state=obs.flatten(),          # Log the single drone state
+            control=control_padded        # Log the computed action
+        )
 
-            # Add debug dot for predicted position
-            p.addUserDebugLine(
-                lineFromXYZ=target_position,
-                lineToXYZ=target_position + np.array([0, 0, 0.1]),
-                lineColorRGB=[1, 0, 0],  # Red color
-                lineWidth=10,
-                lifeTime=1/env.CTRL_FREQ
-            )
+        # Render
+        env.render()
 
-            print('timestep = ', i)
-            # print('observation = ', obs)
-            print('state_vector = ', state_vector[:3])
-            print("Target Position:", target_position)
+        # Sync the simulation 
+        if gui:
+            sync(i, START, env.CTRL_TIMESTEP)
 
-            # Compute Control Input 
-            action, _, _ = ctrl.computeControlFromState(
-                control_timestep=env.CTRL_TIMESTEP,
-                state=state_vector,           
-                target_pos=target_position,
-            )
+        # Advance to the next waypoint
+        if np.linalg.norm(state_vector[:3] - target_position) < 0.05 and waypoint_index < prediction_horizon:
+            waypoint_index += 1
 
-            drone_position = state_vector[:3]
-
-            p.addUserDebugLine(
-                lineFromXYZ=drone_position,
-                lineToXYZ=drone_position + np.array([0, 0, 0.1]),
-                lineColorRGB=[0, 0, 1],  # Blue color
-                lineWidth=3,
-                lifeTime=1/env.CTRL_FREQ
-            )
-            action = action.reshape(1, 4)
-
-            # Pad control input to size (12,)
-            control_padded = np.zeros(12)  # Create a 12-element array
-            control_padded[:4] = action.flatten()  # Place rotor speeds in the first 4 elements
-
-            # Log the Simulation 
-            logger.log(
-                drone=0,                      # Only one drone
-                timestamp=i / env.CTRL_FREQ,
-                state=obs.flatten(),          # Log the single drone state
-                control=control_padded        # Log the computed action
-            )
-
-            # Render
-            env.render()
-
-            # Sync the simulation 
-            if gui:
-                sync(i, START, env.CTRL_TIMESTEP)
-
-            if np.linalg.norm(state_vector[:3] - target_position) < 0.05 and waypoint_index < prediction_horizon:
-                waypoint_index += 1
-
-    except KeyboardInterrupt:
-        print("Simulation interrupted. Saving logs...")
-
-    finally:
-        #### Close the environment and save logs
-        env.close()
+    env.close() 
 
 if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##

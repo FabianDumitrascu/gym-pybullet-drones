@@ -240,13 +240,6 @@ def set_initial_state(solver, state_vector, input_vector, prediction_horizon):
     solver.set(0, "x", state_vector)
     solver.set(0, "lbx", state_vector)
     solver.set(0, "ubx", state_vector)
-    # solver.set(0, "u", input_vector)
-    # solver.set(0, "lbu", input_vector - 0.2*input_vector)
-    # solver.set(0, "ubu", input_vector + 0.2*input_vector)
-    # print('acados state = ', state_vector[:3])
-
-    # for stage in range(prediction_horizon):
-    #     solver.set(stage, "u", input_vector)
     retrieved_state = solver.get(0, "x")
     print(f"acados state = {retrieved_state[0:3]}")
 
@@ -277,6 +270,8 @@ def get_solution(solver, nx, nu, prediction_horizon, final_time, sphere_radius, 
 
     # Plot results
     time = np.linspace(0, final_time, prediction_horizon+1)
+    
+    '''Uncomment to plot the results'''
     # plot_results(time, simX[:,0:3], simU)
     # plot_results_2d_3d(time, simX[:,0:3], simU, sphere_radius, sphere_center, start_pos, end_pos)
 
@@ -309,5 +304,3 @@ def add_debug_dot():
 
     p.disconnect()
 
-# if __name__ == '__main__':
-#     main()
