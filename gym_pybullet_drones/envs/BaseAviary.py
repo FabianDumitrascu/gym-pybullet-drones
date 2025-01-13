@@ -83,6 +83,9 @@ class BaseAviary(gym.Env):
         self.PYB_TIMESTEP = 1. / self.PYB_FREQ
         #### Parameters ############################################
         self.NUM_DRONES = num_drones
+
+        self.current_rpms = np.zeros((self.NUM_DRONES, 4))
+
         self.NEIGHBOURHOOD_RADIUS = neighbourhood_radius
         #### Options ###############################################
         self.DRONE_MODEL = drone_model
@@ -700,6 +703,9 @@ class BaseAviary(gym.Env):
         """
         forces = np.array(rpm**2)*self.KF
         torques = np.array(rpm**2)*self.KM
+
+        self.current_rpms[nth_drone] = rpm
+
         if self.DRONE_MODEL == DroneModel.RACE:
             torques = -torques
         z_torque = (-torques[0] + torques[1] - torques[2] + torques[3])

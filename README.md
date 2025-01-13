@@ -53,16 +53,3 @@ The script above uses two custom added scripts. These are the `quadrotor_dynamic
 
 
  
-
-
-
-
-
-
-
-
-
-
-
-
-
