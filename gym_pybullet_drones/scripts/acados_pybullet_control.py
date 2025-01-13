@@ -52,7 +52,7 @@ DEFAULT_COLAB = False
 
 # Define start and end postion
 start_pos = np.array([0,0,0.5])
-end_pos = np.array([1,1,1.5])
+end_pos = np.array([0,0,1])
 
 def target_trajectory_generator(start_pos, end_pos):
     distance = np.linalg.norm(start_pos - end_pos)
@@ -179,7 +179,7 @@ def run(
                 break
 
 
-            simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time, sphere_radius, sphere_center)
+            simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time, sphere_radius, sphere_center, start_pos, end_pos)
             # Update the warm-start guesses for the next iteration
             simX_prev = simX
             simU_prev = simU
