@@ -15,7 +15,7 @@ Programs that need to be installed before being able to run the scripts are the 
 - Gym-pybullet-drones environment
 - Acados solver
 
-The installation instructions of the `gym-pybullet-drones' environment are found in the README of its github page which can be accessed using the following link:
+The installation instructions of the `gym-pybullet-drones` environment are found in the README of its github page which can be accessed using the following link:
 //github.com/utiasDSL/gym-pybullet-drones. After succesful installation, the `drones` python environment should be available and activated.
 
 ### Acados
