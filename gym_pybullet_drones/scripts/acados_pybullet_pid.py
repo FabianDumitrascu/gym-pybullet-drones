@@ -52,7 +52,7 @@ DEFAULT_COLAB = False
 
 # Define start and end postion
 start_pos = np.array([0,0,0.5])
-end_pos = np.array([0,0,1])
+end_pos = np.array([0.5,0.5,1])
 
 def target_trajectory_generator(start_pos, end_pos):
     distance = np.linalg.norm(start_pos - end_pos)
@@ -134,6 +134,11 @@ def plot_multi_time(data_matrix, sim_time, labels=None, plot_title=None, second_
     plt.tight_layout(rect=[0, 0.03, 1, 0.96])
     plt.show()
 
+def add_custom_obstacles(client):
+    '''Add custom obstacles and retrieve their boundary data.'''
+    # Load a sphere
+    sphere_id = p.loadURDF("../assets/sphere.urdf", [0.25, 0.25, 0.7], p.getQuaternionFromEuler([0, 0, 0]), physicsClientId=client)
+
 def run(
         drone=DEFAULT_DRONES,
         num_drones=DEFAULT_NUM_DRONES,
@@ -154,7 +159,7 @@ def run(
     #### Initialize the simulation #############################
 
     # Define spherical obstacle
-    sphere_radius = 0.001
+    sphere_radius = 0.15
     sphere_center = np.array([0.25, 0.25, 0.7])
 
     INIT_RPYS = np.array([[0.0, 0.0, 0.0]])
@@ -178,6 +183,9 @@ def run(
 
     #### Obtain the PyBullet Client ID from the environment ####
     PYB_CLIENT = env.getPyBulletClient()
+    
+    # Add custom obstacles
+    add_custom_obstacles(env.getPyBulletClient())
 
     #### Initialize the logger #################################
     logger = Logger(logging_freq_hz=control_freq_hz,

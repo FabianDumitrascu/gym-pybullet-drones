@@ -3,7 +3,7 @@
   <link name="base_link">
     <visual>
       <geometry>
-        <sphere radius="0.4"/>
+        <sphere radius="0.15"/>
       </geometry>
       <material name="brown">
         <color rgba="0.82 0.71 0.55 1.0"/> <!-- Yellow color -->
@@ -11,7 +11,7 @@
     </visual>
     <collision>
       <geometry>
-        <sphere radius="0.2"/>
+        <sphere radius="0.15"/>
       </geometry>
     </collision>
     <inertial>
