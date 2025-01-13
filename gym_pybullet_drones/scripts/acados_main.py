@@ -69,7 +69,7 @@ def plot_results_2d_3d(time, simX, simU, sphere_radius, sphere_center, start_pos
     plt.show()
 
     # Side view XZ
-    fig, ax = plt.subplots(figsize=(6,6))
+    fig, ax = plt.subplots(figsize=(6, 6))
     ax.plot(simX[:, 0], simX[:, 2], 'b.-', label="(x,z) path")
     # Plot straight-line trajectory
     ax.plot(
@@ -84,16 +84,16 @@ def plot_results_2d_3d(time, simX, simU, sphere_radius, sphere_center, start_pos
     ax.grid(True)
     ax.axis('equal')
 
-    # Draw the obstacle region (circle).
+    # Draw the obstacle region (circle) projected in the XZ plane
     from matplotlib.patches import Circle
-    obstacle_circle = Circle((sphere_center[1], sphere_center[2]), sphere_radius, color="red", alpha=0.3, label="Obstacle Projection")
-    ax.add_patch(obstacle_circle)
+    obstacle_circle_xz = Circle((sphere_center[0], sphere_center[2]), sphere_radius, color="red", alpha=0.3, label="Obstacle Projection")
+    ax.add_patch(obstacle_circle_xz)
     ax.legend()
     plt.show()
 
     # Side view YZ
     fig, ax = plt.subplots(figsize=(6,6))
-    ax.plot(simX[:, 0], simX[:, 2], 'b.-', label="(y,z) path")
+    ax.plot(simX[:, 1], simX[:, 2], 'b.-', label="(y,z) path")
 
     # Plot straight-line trajectory
     ax.plot(
@@ -109,9 +109,9 @@ def plot_results_2d_3d(time, simX, simU, sphere_radius, sphere_center, start_pos
     ax.grid(True)
     ax.axis('equal')
 
-    # Draw the obstacle region (circle).
+    # Draw the obstacle region (circle) in the YZ plane
     from matplotlib.patches import Circle
-    obstacle_circle = Circle((sphere_center[0], sphere_center[1]), sphere_radius, color="red", alpha=0.3, label="Obstacle Projection")
+    obstacle_circle = Circle((sphere_center[1], sphere_center[2]), sphere_radius, color="red", alpha=0.3, label="Obstacle Projection")
     ax.add_patch(obstacle_circle)
     ax.legend()
     plt.show()
@@ -162,9 +162,9 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
 
     # cost matrices
     Q_mat = np.diag([
-                    5, 5, 10,    # x, y, z
-                    1, 1, 5,       # vx, vy, vz
-                    1, 1, 1, 1,  # q0, q1, q2, q3 (orientation)
+                    5, 5, 5,    # x, y, z
+                    1, 1, 1,       # vx, vy, vz
+                    0, 0, 0, 0,  # q0, q1, q2, q3 (orientation)
                     1, 1, 1  # wx, wy, wz
     ])
     R_mat = 30*np.eye(4)
@@ -181,7 +181,7 @@ def initialize_solver(prediction_horizon=20, final_time=1.0, end_position=np.zer
     Q_mat_e = np.diag([
                     2, 2, 2,    # x, y, z
                     1, 1, 10,       # vx, vy, vz
-                    0, 0, 0, 0,  # q0, q1, q2, q3 (orientation)
+                    1, 1, 1, 1,  # q0, q1, q2, q3 (orientation)
                     1, 1, 1  # wx, wy, wz
     ])
 

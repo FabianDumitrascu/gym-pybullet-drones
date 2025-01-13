@@ -51,7 +51,7 @@ DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_COLAB = False
 
 start_pos = np.array([0,0,0.5])
-end_pos = np.array([0.5,0.5,0.5])
+end_pos = np.array([0,0.2,0.5])
 
 def target_trajectory_generator(start_pos, end_pos):
     distance = np.linalg.norm(start_pos - end_pos)
@@ -98,6 +98,9 @@ def run(
         end_pos=end_pos
         ):
     #### Initialize the simulation #############################
+
+    sphere_radius = 0
+    sphere_center = np.array([0.25, 0.25, 0.7])
 
     INIT_RPYS = np.array([[0.0, 0.0, 0.0]])
     INIT_XYZS = np.array([start_pos])
@@ -164,11 +167,11 @@ def run(
             
             # Solve the OCP
             status = solve_ocp(solver)
-            if status != 0:
-                print(f"Acados solver failed at timestep {i}. State: {state_vector}")
+            if status not in [0, 2]:   # 0 = success, 2 = max iters but let's accept
+                print(f"ACADOS gave an unexpected status: {status}, stopping.")
                 break
 
-            simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time)
+            simX, simU = get_solution(solver, nx, nu, prediction_horizon, final_time, sphere_radius, sphere_center, start_pos,  end_pos)
             predicted_x, predicted_y, predicted_z = simX[2, :3]
             target_position = np.array([predicted_x, predicted_y, predicted_z]).flatten()
 

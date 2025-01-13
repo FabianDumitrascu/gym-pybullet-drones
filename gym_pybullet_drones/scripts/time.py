@@ -36,6 +36,9 @@ from gym_pybullet_drones.utils.utils import sync, str2bool
 from quadrotor_dynamic_model_test import exportModel
 from acados_main import initialize_solver, set_initial_state, solve_ocp, get_solution
 
+# Adomas
+from time import process_time
+
 DEFAULT_DRONES = DroneModel("cf2x")
 DEFAULT_NUM_DRONES = 1
 DEFAULT_PHYSICS = Physics("pyb")
@@ -53,6 +56,27 @@ DEFAULT_COLAB = False
 # Define start and end postion
 start_pos = np.array([0,0,0.5])
 end_pos = np.array([0,0,1])
+
+# Adomas
+def time_diff(start, end, decimals=2):
+    # Returns the time difference in ms (float). Rounded.
+    return round((end - start) * 1000.0, decimals)
+
+def plot_simulation_time(data, timesteps=None, title="Simulation Data", xlabel="Time Step", ylabel="Value"):
+    if timesteps is None:
+        timesteps = np.arange(data.shape[0])
+    
+    mean_value = np.mean(data)
+    plt.figure(figsize=(8, 5))
+    plt.plot(timesteps, data, marker='o', linestyle='-', color='b', label='Simulation Data')
+    plt.axhline(y=mean_value, color='r', linestyle='--', label=f'Mean: {mean_value:.2f}')
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.ylim(0, 80)
+    plt.grid(True)
+    plt.legend()
+    plt.show()
 
 def target_trajectory_generator(start_pos, end_pos):
     distance = np.linalg.norm(start_pos - end_pos)
@@ -154,12 +178,16 @@ def run(
     #### Initialize the simulation #############################
 
     # Define spherical obstacle
-    sphere_radius = 0.001
-    sphere_center = np.array([0.25, 0.25, 0.7])
+    sphere_radius = 0
+    sphere_center = np.array([0, 0, 0.7])
 
     INIT_RPYS = np.array([[0.0, 0.0, 0.0]])
     INIT_XYZS = np.array([start_pos])
     x0 = np.concatenate([start_pos, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
+    
+    # Adomas
+    control_steps = int(duration_sec * DEFAULT_CONTROL_FREQ_HZ)
+    solve_time = []
 
     #### Create the environment ################################
     env = CtrlAviary(drone_model=drone,
@@ -217,14 +245,18 @@ def run(
             print(f"Current rpms for : {env.current_rpms[0]}")
             state_vector = (obs.flatten())[:13]
         
-            # set_initial_state(solver, state_vector, hover_u, prediction_horizon)
+            set_initial_state(solver, state_vector, hover_u, prediction_horizon)
 
-            if i == 0 :
+            if 0 == 0 :
                 set_initial_state(solver, state_vector, hover_u, prediction_horizon)
 
                 
                 # Solve the OCP
+                # Adomas
+                start_time = process_time()
                 status = solve_ocp(solver, simX_prev, simU_prev, prediction_horizon)
+                end_time = process_time()
+                solve_time.append(time_diff(start_time, end_time))
                 if status not in [0, 2]:   # 0 = success, 2 = max iters but let's accept
                     print(f"ACADOS gave an unexpected status: {status}, stopping.")
                     break
@@ -296,6 +328,10 @@ def run(
     finally:
         #### Close the environment and save logs
         env.close()
+        solve_time = np.array(solve_time)
+        print("Mean solve time: ", np.mean(solve_time))
+        print("Max solve time: ", np.max(solve_time))
+        plot_simulation_time(solve_time, title="Solver time", ylabel="Solver time (ms)")
 
 if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##
